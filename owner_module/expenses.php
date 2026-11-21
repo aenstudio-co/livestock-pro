@@ -54,11 +54,11 @@ $records        = $pdo->query("SELECT * FROM `expenses` ORDER BY `expense_id` DE
         <div class="sidebar-brand-sub">Farm Management Tracker</div>
       </div>
       <ul class="sidebar-nav">
-        <li><a href="staff_dashboard.php">Dashboard</a></li>
-        <li><a href="livestock.php">Livestock</a></li>
-        <li><a href="task_schedule.php">Task Schedule</a></li>
-        <li><a class="active" href="expenses.php">Expenses</a></li>
-        <li><a href="sales.php">Sales</a></li>
+        <li><a href="owner_module/owner_dashboard.php">Dashboard</a></li>
+        <li><a href="owner_module/livestock.php">Livestock</a></li>
+        <li><a href="owner_module/task_schedule.php">Task Schedule</a></li>
+        <li><a class="active" href="owner_module/expenses.php">Expenses</a></li>
+        <li><a href="owner_module/sales.php">Sales</a></li>
         <li><a href="profile.php">My Profile</a></li>
       </ul>
       <div class="sidebar-user">
