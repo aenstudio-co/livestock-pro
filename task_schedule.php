@@ -2,15 +2,33 @@
 require_once 'includes/db_connect.php';
 if (!isset($_SESSION['user_id'])) { header("Location: login.php"); exit; }
 
-$full_name = trim(($_SESSION['first_name'] ?? 'Juan') . ' ' . ($_SESSION['last_name'] ?? 'Dela Cruz'));
+$full_name = trim(($_SESSION['first_name'] ?? '') . ' ' . ($_SESSION['last_name'] ?? ''));
+if ($full_name === '') { $full_name = 'User'; }
 $user_id   = $_SESSION['user_id'];
 $role      = strtoupper($_SESSION['user_type'] ?? 'O');
 $message   = "";
 
+$staff_rows = $pdo->query("
+    SELECT u.user_id, u.first_name, u.last_name
+    FROM `staff` s
+    JOIN `user` u ON s.user_id = u.user_id
+    ORDER BY u.first_name ASC, u.last_name ASC
+")->fetchAll();
+
+$staff_map = [];
+foreach ($staff_rows as $sr) {
+    $staff_map[$sr['user_id']] = trim($sr['first_name'] . ' ' . $sr['last_name']);
+}
+if (!isset($staff_map[$user_id])) {
+    $staff_map[$user_id] = $full_name;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_task'])) {
-    $tname = trim($_POST['task_name'] ?? '');
-    $sdate = substr(trim($_POST['schedule_date'] ?? date('Y-m-d')), 0, 10);
-    $tdesc = trim($_POST['task_description'] ?? '');
+    $tname          = trim($_POST['task_name'] ?? '');
+    $sdate          = substr(trim($_POST['schedule_date'] ?? date('Y-m-d')), 0, 10);
+    $tdesc          = trim($_POST['task_description'] ?? '');
+    $assigned_staff = trim($_POST['assigned_staff'] ?? '');
+    $target_user_id = ($assigned_staff !== '') ? $assigned_staff : $user_id;
 
     if ($tname !== '') {
         $count  = (int)$pdo->query("SELECT COUNT(*) FROM `task_schedule`")->fetchColumn() + 1;
@@ -22,7 +40,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_task'])) {
         ");
         $stmt->execute([
             'tid'   => $new_id,
-            'uid'   => $user_id,
+            'uid'   => $target_user_id,
             'tname' => $tname,
             'tdesc' => $tdesc !== '' ? $tdesc : null,
             'sdate' => $sdate
@@ -45,8 +63,13 @@ if (isset($_GET['delete'])) {
     exit;
 }
 
-$pending   = $pdo->query("SELECT * FROM `task_schedule` WHERE `task_status` != 'Completed' ORDER BY `task_id` DESC")->fetchAll();
-$completed = $pdo->query("SELECT * FROM `task_schedule` WHERE `task_status` = 'Completed' ORDER BY `task_id` DESC")->fetchAll();
+$cnt_pending     = (int)$pdo->query("SELECT COUNT(*) FROM `task_schedule` WHERE `task_status` = 'Pending'")->fetchColumn();
+$cnt_in_progress = (int)$pdo->query("SELECT COUNT(*) FROM `task_schedule` WHERE `task_status` = 'In Progress'")->fetchColumn();
+$cnt_cancelled   = (int)$pdo->query("SELECT COUNT(*) FROM `task_schedule` WHERE `task_status` = 'Cancelled'")->fetchColumn();
+
+$pending       = $pdo->query("SELECT * FROM `task_schedule` WHERE `task_status` != 'Completed' ORDER BY `task_id` DESC")->fetchAll();
+$completed     = $pdo->query("SELECT * FROM `task_schedule` WHERE `task_status` = 'Completed' ORDER BY `task_id` DESC")->fetchAll();
+$cnt_completed = count($completed);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -60,8 +83,13 @@ $completed = $pdo->query("SELECT * FROM `task_schedule` WHERE `task_status` = 'C
   <div class="app-shell">
     <aside class="sidebar">
       <div class="sidebar-brand">
-        <div class="sidebar-brand-title">&#128004; LivestockPro</div>
-        <div class="sidebar-brand-sub">Farm Management Tracker</div>
+        <div class="sidebar-brand-row">
+          <img src="assets/logo.png" alt="LivestockPro Logo" class="sidebar-logo-img">
+          <div>
+            <div class="sidebar-brand-title">LivestockPro</div>
+            <div class="sidebar-brand-sub">Farm Management Tracker</div>
+          </div>
+        </div>
       </div>
       <ul class="sidebar-nav">
         <li><a href="<?= $role === 'O' ? 'owner_dashboard.php' : 'staff_dashboard.php' ?>">Dashboard</a></li>
@@ -72,12 +100,13 @@ $completed = $pdo->query("SELECT * FROM `task_schedule` WHERE `task_status` = 'C
         <?php if ($role === 'O'): ?>
           <li><a href="reports.php">Reports</a></li>
         <?php endif; ?>
+        <li><a href="profile.php">My Profile</a></li>
       </ul>
       <div class="sidebar-user">
         <div class="sidebar-avatar"><?= strtoupper(substr($full_name, 0, 2)) ?></div>
-        <div>
+        <div style="flex:1;">
           <div class="sidebar-user-name"><?= htmlspecialchars($full_name) ?></div>
-          <div class="sidebar-user-id"><?= htmlspecialchars($user_id) ?></div>
+          <div class="sidebar-user-id"><?= htmlspecialchars($user_id) ?> &middot; <a href="logout.php" style="color:rgba(255,255,255,0.75);font-size:10px;">Logout</a></div>
         </div>
       </div>
     </aside>
@@ -92,6 +121,25 @@ $completed = $pdo->query("SELECT * FROM `task_schedule` WHERE `task_status` = 'C
         <div class="alert alert-success"><?= htmlspecialchars($message) ?></div>
       <?php endif; ?>
 
+      <div class="status-holder-grid">
+        <div class="status-holder-card">
+          <div class="status-holder-label">Pending</div>
+          <div class="status-holder-count"><?= $cnt_pending ?></div>
+        </div>
+        <div class="status-holder-card">
+          <div class="status-holder-label">In Progress</div>
+          <div class="status-holder-count"><?= $cnt_in_progress ?></div>
+        </div>
+        <div class="status-holder-card">
+          <div class="status-holder-label">Completed</div>
+          <div class="status-holder-count"><?= $cnt_completed ?></div>
+        </div>
+        <div class="status-holder-card">
+          <div class="status-holder-label">Cancelled</div>
+          <div class="status-holder-count"><?= $cnt_cancelled ?></div>
+        </div>
+      </div>
+
       <div class="card">
         <div class="card-title">Add Task</div>
         <form method="POST" action="task_schedule.php">
@@ -102,7 +150,7 @@ $completed = $pdo->query("SELECT * FROM `task_schedule` WHERE `task_status` = 'C
             </div>
             <div class="form-group">
               <label class="form-label">SCHEDULE TIME</label>
-              <input class="form-control" type="datetime-local" name="schedule_date" value="2026-12-13T01:00">
+              <input class="form-control" type="datetime-local" name="schedule_date" value="<?= date('Y-m-d\TH:i') ?>">
             </div>
           </div>
 
@@ -119,7 +167,13 @@ $completed = $pdo->query("SELECT * FROM `task_schedule` WHERE `task_status` = 'C
             <div class="form-group">
               <label class="form-label">ASSIGN STAFF</label>
               <select class="form-control" name="assigned_staff">
-                <option value="<?= htmlspecialchars($user_id) ?>"><?= htmlspecialchars($user_id . ' - ' . $full_name) ?></option>
+                <option value="<?= htmlspecialchars($user_id) ?>"><?= htmlspecialchars($user_id . ' - ' . $full_name . ' (Me)') ?></option>
+                <?php foreach ($staff_rows as $sr): ?>
+                  <?php if ($sr['user_id'] !== $user_id): ?>
+                    <?php $s_label = $sr['user_id'] . ' - ' . trim($sr['first_name'] . ' ' . $sr['last_name']); ?>
+                    <option value="<?= htmlspecialchars($sr['user_id']) ?>"><?= htmlspecialchars($s_label) ?></option>
+                  <?php endif; ?>
+                <?php endforeach; ?>
               </select>
             </div>
             <div class="form-group">
@@ -128,7 +182,7 @@ $completed = $pdo->query("SELECT * FROM `task_schedule` WHERE `task_status` = 'C
             </div>
           </div>
 
-          <button class="btn btn-primary" type="submit" name="add_task">&#10003; ADD TASK</button>
+          <button class="btn btn-primary" type="submit" name="add_task"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg> ADD TASK</button>
         </form>
       </div>
 
@@ -140,25 +194,61 @@ $completed = $pdo->query("SELECT * FROM `task_schedule` WHERE `task_status` = 'C
           </thead>
           <tbody>
             <?php foreach ($pending as $i => $t): ?>
+              <?php
+                $status_val = $t['task_status'] ?? 'Pending';
+                if ($status_val === 'In Progress') {
+                  $btn_cls = 'is-in-progress';
+                } elseif ($status_val === 'Completed') {
+                  $btn_cls = 'is-completed';
+                } elseif ($status_val === 'Cancelled') {
+                  $btn_cls = 'is-cancelled';
+                } else {
+                  $btn_cls = 'is-pending';
+                }
+                $assigned_name = $staff_map[$t['user_id']] ?? $t['user_id'];
+              ?>
               <tr>
                 <td><?= $i + 1 ?></td>
                 <td><?= htmlspecialchars($t['task_id']) ?></td>
                 <td><?= strtoupper(htmlspecialchars($t['task_name'])) ?></td>
                 <td><?= strtoupper(htmlspecialchars($t['task_description'] ?? 'SCHEDULED TASK')) ?></td>
-                <td><?= htmlspecialchars($t['schedule_date']) ?></td>
-                <td><?= htmlspecialchars($full_name) ?></td>
+                <td style="white-space:nowrap;"><?= htmlspecialchars($t['schedule_date']) ?></td>
+                <td><?= htmlspecialchars($assigned_name) ?></td>
                 <td>
-                  <form method="POST" action="task_schedule.php" style="display:inline;">
-                    <input type="hidden" name="task_id" value="<?= htmlspecialchars($t['task_id']) ?>">
-                    <select name="task_status" class="badge badge-pending" onchange="this.form.submit()" style="border:none;cursor:pointer;">
-                      <option value="Pending" <?= $t['task_status'] === 'Pending' ? 'selected' : '' ?>>PENDING</option>
-                      <option value="In Progress" <?= $t['task_status'] === 'In Progress' ? 'selected' : '' ?>>IN PROGRESS</option>
-                      <option value="Completed">COMPLETED</option>
-                    </select>
-                    <input type="hidden" name="update_status" value="1">
-                  </form>
+                  <div class="status-dd">
+                    <button type="button" class="status-dd-btn <?= $btn_cls ?>" onclick="toggleStatusMenu(this)">
+                      <span><?= strtoupper(htmlspecialchars($status_val)) ?></span>
+                      <span>&#9662;</span>
+                    </button>
+                    <div class="status-dd-menu">
+                      <form method="POST" action="task_schedule.php">
+                        <input type="hidden" name="task_id" value="<?= htmlspecialchars($t['task_id']) ?>">
+                        <input type="hidden" name="task_status" value="Pending">
+                        <input type="hidden" name="update_status" value="1">
+                        <button type="submit" class="status-dd-opt opt-pending">PENDING</button>
+                      </form>
+                      <form method="POST" action="task_schedule.php">
+                        <input type="hidden" name="task_id" value="<?= htmlspecialchars($t['task_id']) ?>">
+                        <input type="hidden" name="task_status" value="In Progress">
+                        <input type="hidden" name="update_status" value="1">
+                        <button type="submit" class="status-dd-opt opt-in-progress">IN PROGRESS</button>
+                      </form>
+                      <form method="POST" action="task_schedule.php">
+                        <input type="hidden" name="task_id" value="<?= htmlspecialchars($t['task_id']) ?>">
+                        <input type="hidden" name="task_status" value="Completed">
+                        <input type="hidden" name="update_status" value="1">
+                        <button type="submit" class="status-dd-opt opt-completed">COMPLETED</button>
+                      </form>
+                      <form method="POST" action="task_schedule.php">
+                        <input type="hidden" name="task_id" value="<?= htmlspecialchars($t['task_id']) ?>">
+                        <input type="hidden" name="task_status" value="Cancelled">
+                        <input type="hidden" name="update_status" value="1">
+                        <button type="submit" class="status-dd-opt opt-cancelled">CANCELLED</button>
+                      </form>
+                    </div>
+                  </div>
                 </td>
-                <td><a class="btn btn-sm btn-delete" href="task_schedule.php?delete=<?= urlencode($t['task_id']) ?>">&#128465;</a></td>
+                <td><a class="btn btn-sm btn-delete" href="task_schedule.php?delete=<?= urlencode($t['task_id']) ?>" title="Delete"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg></a></td>
               </tr>
             <?php endforeach; ?>
           </tbody>
@@ -173,15 +263,49 @@ $completed = $pdo->query("SELECT * FROM `task_schedule` WHERE `task_status` = 'C
           </thead>
           <tbody>
             <?php foreach ($completed as $i => $t): ?>
+              <?php $assigned_name = $staff_map[$t['user_id']] ?? $t['user_id']; ?>
               <tr>
                 <td><?= $i + 1 ?></td>
                 <td><?= htmlspecialchars($t['task_id']) ?></td>
                 <td><?= strtoupper(htmlspecialchars($t['task_name'])) ?></td>
                 <td><?= strtoupper(htmlspecialchars($t['task_description'] ?? 'SCHEDULED TASK')) ?></td>
-                <td><?= htmlspecialchars($t['schedule_date']) ?></td>
-                <td><?= htmlspecialchars($full_name) ?></td>
-                <td><span class="badge badge-completed">COMPLETED</span></td>
-                <td><a class="btn btn-sm btn-delete" href="task_schedule.php?delete=<?= urlencode($t['task_id']) ?>">&#128465;</a></td>
+                <td style="white-space:nowrap;"><?= htmlspecialchars($t['schedule_date']) ?></td>
+                <td><?= htmlspecialchars($assigned_name) ?></td>
+                <td>
+                  <div class="status-dd">
+                    <button type="button" class="status-dd-btn is-completed" onclick="toggleStatusMenu(this)">
+                      <span>COMPLETED</span>
+                      <span>&#9662;</span>
+                    </button>
+                    <div class="status-dd-menu">
+                      <form method="POST" action="task_schedule.php">
+                        <input type="hidden" name="task_id" value="<?= htmlspecialchars($t['task_id']) ?>">
+                        <input type="hidden" name="task_status" value="Pending">
+                        <input type="hidden" name="update_status" value="1">
+                        <button type="submit" class="status-dd-opt opt-pending">PENDING</button>
+                      </form>
+                      <form method="POST" action="task_schedule.php">
+                        <input type="hidden" name="task_id" value="<?= htmlspecialchars($t['task_id']) ?>">
+                        <input type="hidden" name="task_status" value="In Progress">
+                        <input type="hidden" name="update_status" value="1">
+                        <button type="submit" class="status-dd-opt opt-in-progress">IN PROGRESS</button>
+                      </form>
+                      <form method="POST" action="task_schedule.php">
+                        <input type="hidden" name="task_id" value="<?= htmlspecialchars($t['task_id']) ?>">
+                        <input type="hidden" name="task_status" value="Completed">
+                        <input type="hidden" name="update_status" value="1">
+                        <button type="submit" class="status-dd-opt opt-completed">COMPLETED</button>
+                      </form>
+                      <form method="POST" action="task_schedule.php">
+                        <input type="hidden" name="task_id" value="<?= htmlspecialchars($t['task_id']) ?>">
+                        <input type="hidden" name="task_status" value="Cancelled">
+                        <input type="hidden" name="update_status" value="1">
+                        <button type="submit" class="status-dd-opt opt-cancelled">CANCELLED</button>
+                      </form>
+                    </div>
+                  </div>
+                </td>
+                <td><a class="btn btn-sm btn-delete" href="task_schedule.php?delete=<?= urlencode($t['task_id']) ?>" title="Delete"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg></a></td>
               </tr>
             <?php endforeach; ?>
           </tbody>
@@ -191,7 +315,22 @@ $completed = $pdo->query("SELECT * FROM `task_schedule` WHERE `task_status` = 'C
   </div>
 
   <script>
-    function setTask(val) { document.getElementById('task_name').value = val; }
+    function setTask(val) {
+      document.getElementById('task_name').value = val;
+    }
+
+    function toggleStatusMenu(btn) {
+      const dd = btn.closest('.status-dd');
+      const isOpen = dd.classList.contains('open');
+      document.querySelectorAll('.status-dd.open').forEach(el => el.classList.remove('open'));
+      if (!isOpen) dd.classList.add('open');
+    }
+
+    document.addEventListener('click', function (e) {
+      if (!e.target.closest('.status-dd')) {
+        document.querySelectorAll('.status-dd.open').forEach(el => el.classList.remove('open'));
+      }
+    });
   </script>
 </body>
 </html>

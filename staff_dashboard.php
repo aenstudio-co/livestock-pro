@@ -22,8 +22,13 @@ $tasks           = $pdo->query("SELECT task_id, task_name, task_description, sch
   <div class="app-shell">
     <aside class="sidebar">
       <div class="sidebar-brand">
-        <div class="sidebar-brand-title">&#128004; LivestockPro</div>
-        <div class="sidebar-brand-sub">Farm Management Tracker</div>
+        <div class="sidebar-brand-row">
+          <img src="assets/logo.png" alt="LivestockPro Logo" class="sidebar-logo-img">
+          <div>
+            <div class="sidebar-brand-title">LivestockPro</div>
+            <div class="sidebar-brand-sub">Farm Management Tracker</div>
+          </div>
+        </div>
       </div>
       <ul class="sidebar-nav">
         <li><a class="active" href="staff_dashboard.php">Dashboard</a></li>
@@ -91,7 +96,7 @@ $tasks           = $pdo->query("SELECT task_id, task_name, task_description, sch
                   <td><?= htmlspecialchars($t['task_id']) ?></td>
                   <td><?= strtoupper(htmlspecialchars($t['task_name'])) ?></td>
                   <td><?= strtoupper(htmlspecialchars($t['task_description'] ?? 'SCHEDULED TASK')) ?></td>
-                  <td><?= htmlspecialchars($t['schedule_date']) ?></td>
+                  <td style="white-space:nowrap;"><?= htmlspecialchars($t['schedule_date']) ?></td>
                 </tr>
               <?php endforeach; ?>
             </tbody>

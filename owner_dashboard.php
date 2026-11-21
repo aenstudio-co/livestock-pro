@@ -25,8 +25,13 @@ $tasks = $pdo->query("SELECT task_id, task_name, task_description, schedule_date
   <div class="app-shell">
     <aside class="sidebar">
       <div class="sidebar-brand">
-        <div class="sidebar-brand-title">&#128004; LivestockPro</div>
-        <div class="sidebar-brand-sub">Farm Management Tracker</div>
+        <div class="sidebar-brand-row">
+          <img src="assets/logo.png" alt="LivestockPro Logo" class="sidebar-logo-img">
+          <div>
+            <div class="sidebar-brand-title">LivestockPro</div>
+            <div class="sidebar-brand-sub">Farm Management Tracker</div>
+          </div>
+        </div>
       </div>
       <ul class="sidebar-nav">
         <li><a class="active" href="owner_dashboard.php">Dashboard</a></li>
@@ -35,12 +40,13 @@ $tasks = $pdo->query("SELECT task_id, task_name, task_description, schedule_date
         <li><a href="expenses.php">Expenses</a></li>
         <li><a href="sales.php">Sales</a></li>
         <li><a href="reports.php">Reports</a></li>
+        <li><a href="profile.php">My Profile</a></li>
       </ul>
       <div class="sidebar-user">
         <div class="sidebar-avatar"><?= strtoupper(substr($full_name, 0, 2)) ?></div>
-        <div>
+        <div style="flex:1;">
           <div class="sidebar-user-name"><?= htmlspecialchars($full_name) ?></div>
-          <div class="sidebar-user-id"><?= htmlspecialchars($user_id) ?></div>
+          <div class="sidebar-user-id"><?= htmlspecialchars($user_id) ?> &middot; <a href="logout.php" style="color:rgba(255,255,255,0.75);font-size:10px;">Logout</a></div>
         </div>
       </div>
     </aside>
@@ -49,14 +55,14 @@ $tasks = $pdo->query("SELECT task_id, task_name, task_description, schedule_date
       <div class="page-header">
         <div>
           <h1 class="page-title">Dashboard</h1>
-          <div class="page-subtitle"> Welcome, <?= htmlspecialchars($full_name) ?>!</div>
+          <div class="page-subtitle">Welcome, <?= htmlspecialchars($full_name) ?>!</div>
           <div class="page-meta-tag"><?= htmlspecialchars($business) ?></div>
         </div>
-        <div style="display:flex;align-items:center;gap:12px;">
-          <span class="page-datetime"><?= date('F d, Y | H:i:s') ?></span>
-        </div>
+        <div class="page-datetime"><?= date('F d, Y | H:i:s') ?></div>
       </div>
 
+
+      
       <div class="kpi-grid-4">
         <div class="kpi-card kpi-card--highlight">
           <div class="kpi-label">Total Livestock</div>
@@ -64,19 +70,19 @@ $tasks = $pdo->query("SELECT task_id, task_name, task_description, schedule_date
           <div class="kpi-value"><?= number_format($total_livestock) ?></div>
           <a class="kpi-link" href="livestock.php">View Livestock &rarr;</a>
         </div>
-        <div class="kpi-card">
+        <div class="kpi-card kpi-card--expenses">
           <div class="kpi-label">Total Expenses</div>
           <div class="kpi-sub">As of <?= date('H:i:s') ?></div>
           <div class="kpi-value">&#8369;<?= number_format($total_expenses, 0) ?></div>
           <a class="kpi-link" href="expenses.php">View Total Expenses &rarr;</a>
         </div>
-        <div class="kpi-card">
+        <div class="kpi-card kpi-card--income">
           <div class="kpi-label">Total Income</div>
           <div class="kpi-sub">As of <?= date('H:i:s') ?></div>
           <div class="kpi-value">&#8369;<?= number_format($total_income, 0) ?></div>
           <a class="kpi-link" href="sales.php">View Total Income &rarr;</a>
         </div>
-        <div class="kpi-card">
+        <div class="kpi-card kpi-card--profit">
           <div class="kpi-label">Profit</div>
           <div class="kpi-sub">As of <?= date('H:i:s') ?></div>
           <div class="kpi-value">&#8369;<?= number_format($profit, 0) ?></div>
@@ -98,7 +104,7 @@ $tasks = $pdo->query("SELECT task_id, task_name, task_description, schedule_date
                   <td><?= htmlspecialchars($t['task_id']) ?></td>
                   <td><?= strtoupper(htmlspecialchars($t['task_name'])) ?></td>
                   <td><?= strtoupper(htmlspecialchars($t['task_description'] ?? 'SCHEDULED TASK')) ?></td>
-                  <td><?= htmlspecialchars($t['schedule_date']) ?></td>
+                  <td style="white-space:nowrap;"><?= htmlspecialchars($t['schedule_date']) ?></td>
                 </tr>
               <?php endforeach; ?>
             </tbody>

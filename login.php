@@ -14,8 +14,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $user = $stmt->fetch();
 
         $ok = false;
-        if ($user && (password_verify($password, $user['password']) || hash_equals((string)$user['password'], $password))) {
-            $ok = true;
+        if ($user) {
+            if (password_verify($password, $user['password']) || hash_equals((string)$user['password'], $password)) {
+                $ok = true;
+            }
         }
 
         if ($ok) {
@@ -47,6 +49,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </head>
 <body>
   <div class="auth-wrapper">
+    <img src="assets/logo.png" alt="" aria-hidden="true" class="auth-watermark-bg">
     <div class="auth-brand">
       <h1>LivestockPro</h1>
       <p>Farm Management Tracker</p>

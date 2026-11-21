@@ -164,8 +164,13 @@ $by_exp_cat = $pdo->query("
   <div class="app-shell">
     <aside class="sidebar">
       <div class="sidebar-brand">
-        <div class="sidebar-brand-title">&#128004; LivestockPro</div>
-        <div class="sidebar-brand-sub">Farm Management Tracker</div>
+        <div class="sidebar-brand-row">
+          <img src="assets/logo.png" alt="LivestockPro Logo" class="sidebar-logo-img">
+          <div>
+            <div class="sidebar-brand-title">LivestockPro</div>
+            <div class="sidebar-brand-sub">Farm Management Tracker</div>
+          </div>
+        </div>
       </div>
       <ul class="sidebar-nav">
         <li><a href="owner_dashboard.php">Dashboard</a></li>
@@ -174,6 +179,7 @@ $by_exp_cat = $pdo->query("
         <li><a href="expenses.php">Expenses</a></li>
         <li><a href="sales.php">Sales</a></li>
         <li><a class="active" href="reports.php">Reports</a></li>
+        <li><a href="profile.php">My Profile</a></li>
       </ul>
       <div class="sidebar-user">
         <div class="sidebar-avatar"><?= strtoupper(substr($full_name, 0, 2)) ?></div>
@@ -189,12 +195,11 @@ $by_exp_cat = $pdo->query("
         <div>
           <h1 class="page-title">Report</h1>
           <div class="page-subtitle">Livestock Farm Summary Report</div>
-          <div class="page-meta-tag">FARMER: <?= htmlspecialchars($full_name) ?> | GENERATED: <?= date('F d, Y  	 g:i A') ?></div>
+          <div class="page-meta-tag">FARMER: <?= htmlspecialchars($full_name) ?> | GENERATED: <?= date('F d, Y \a\t g:i A') ?></div>
         </div>
         <div class="page-datetime"><?= date('F d, Y | H:i:s') ?></div>
       </div>
 
-      <!-- Top 4 KPI Cards -->
       <div class="kpi-grid-4">
         <div class="kpi-card">
           <div class="kpi-label">Total Livestock</div>
@@ -222,7 +227,6 @@ $by_exp_cat = $pdo->query("
         </div>
       </div>
 
-      <!-- Combined ROI Banner + How ROI is Calculated -->
       <div id="roi-section" class="report-roi-box">
         <div>
           <div class="kpi-sub" style="font-size:11px;font-weight:600;color:#1e2525;">Return On Investment (ROI)</div>
@@ -233,21 +237,43 @@ $by_exp_cat = $pdo->query("
         </div>
 
         <div class="report-roi-pills">
-          <div class="report-roi-pill">&#10004; <?= $profit >= 0 ? "Profitable" : "Net Loss" ?></div>
-          <div class="report-roi-pill">&#128176; <?= $exp_count ?> Expense Record(s)</div>
-          <div class="report-roi-pill">&#128181; <?= $sls_count ?> Income Record(s)</div>
+          <div class="report-roi-pill">
+            <svg class="ui-icon ui-icon--teal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="3" y="3" width="18" height="18" rx="4"/>
+              <path d="m9 12 2 2 4-4"/>
+            </svg>
+            <?= $profit >= 0 ? "Profitable" : "Net Loss" ?>
+          </div>
+
+          <div class="report-roi-pill">
+            <svg class="ui-icon ui-icon--teal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 13V5"/>
+              <path d="m8 9 4-4 4 4"/>
+              <path d="M9 13h6l2 7H7l2-7Z"/>
+            </svg>
+            <?= $exp_count ?> Expense Record(s)
+          </div>
+
+          <div class="report-roi-pill">
+            <svg class="ui-icon ui-icon--teal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M9 6h6l2 5v9H7v-9l2-5Z"/>
+              <path d="M12 11v6"/>
+              <path d="M14 13h-2.5a1.5 1.5 0 0 0 0 3h1a1.5 1.5 0 0 1 0 3H10"/>
+            </svg>
+            <?= $sls_count ?> Income Record(s)
+          </div>
         </div>
       </div>
 
       <div class="card">
         <div class="roi-calc-split">
           <div>
-            <div class="card-title" style="margin-bottom:8px;">&#9432; How ROI is Calculated?</div>
+            <div class="card-title" style="margin-bottom:8px;display:flex;align-items:center;gap:6px;"><svg class="ui-icon ui-icon--teal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="16" y2="12"/><line x1="12" x2="12.01" y1="8" y2="8"/></svg> How ROI is Calculated?</div>
             <div style="font-size:12px;color:#1e2525;line-height:1.6;">
               ROI = (Income &minus; Expenses) &divide; Expenses &times; 100<br>
               ROI = (&#8369;<?= number_format($total_income, 0) ?> &minus; &#8369;<?= number_format($total_expenses, 0) ?>) &divide; &#8369;<?= number_format($total_expenses, 0) ?> &times; 100
             </div>
-            <div class="roi-formula-dark">ROI = &#8369;<?= number_format($roi, 2) ?>%</div>
+            <div class="roi-formula-dark">ROI = <?= number_format($roi, 2) ?>%</div>
           </div>
 
           <div class="mini-chart-panel">
@@ -276,9 +302,8 @@ $by_exp_cat = $pdo->query("
         </div>
       </div>
 
-      <!-- Total Sales & Income Summary (Scroll Down Section) -->
       <div class="card">
-        <div class="card-title">&#9432; Total Sales &amp; Income Summary</div>
+        <div class="card-title" style="display:flex;align-items:center;gap:6px;"><svg class="ui-icon ui-icon--teal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="16" y2="12"/><line x1="12" x2="12.01" y1="8" y2="8"/></svg> Total Sales &amp; Income Summary</div>
         <div class="sales-summary-top">
           <span class="sales-summary-badge">&#8369;<?= number_format($total_income, 0) ?></span>
           <span style="font-size:12px;color:var(--text-secondary);">Updated from recorded sales &amp; expenses.</span>
@@ -323,7 +348,6 @@ $by_exp_cat = $pdo->query("
         </div>
       </div>
 
-      <!-- Bottom Split: Livestock Summary (By Type) & Top Expenses Category -->
       <div class="split-grid">
         <div class="card">
           <div class="card-title">Livestock Summary (By Type)</div>

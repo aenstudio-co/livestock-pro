@@ -59,8 +59,13 @@ $records = $pdo->query("SELECT * FROM `livestock` ORDER BY `livestock_id` DESC")
   <div class="app-shell">
     <aside class="sidebar">
       <div class="sidebar-brand">
-        <div class="sidebar-brand-title">&#128004; LivestockPro</div>
-        <div class="sidebar-brand-sub">Farm Management Tracker</div>
+        <div class="sidebar-brand-row">
+          <img src="assets/logo.png" alt="LivestockPro Logo" class="sidebar-logo-img">
+          <div>
+            <div class="sidebar-brand-title">LivestockPro</div>
+            <div class="sidebar-brand-sub">Farm Management Tracker</div>
+          </div>
+        </div>
       </div>
       <ul class="sidebar-nav">
         <li><a href="<?= $role === 'O' ? 'owner_dashboard.php' : 'staff_dashboard.php' ?>">Dashboard</a></li>
@@ -71,12 +76,13 @@ $records = $pdo->query("SELECT * FROM `livestock` ORDER BY `livestock_id` DESC")
         <?php if ($role === 'O'): ?>
           <li><a href="reports.php">Reports</a></li>
         <?php endif; ?>
+        <li><a href="profile.php">My Profile</a></li>
       </ul>
       <div class="sidebar-user">
         <div class="sidebar-avatar"><?= strtoupper(substr($full_name, 0, 2)) ?></div>
-        <div>
+        <div style="flex:1;">
           <div class="sidebar-user-name"><?= htmlspecialchars($full_name) ?></div>
-          <div class="sidebar-user-id"><?= htmlspecialchars($user_id) ?></div>
+          <div class="sidebar-user-id"><?= htmlspecialchars($user_id) ?> &middot; <a href="logout.php" style="color:rgba(255,255,255,0.75);font-size:10px;">Logout</a></div>
         </div>
       </div>
     </aside>
@@ -170,7 +176,7 @@ $records = $pdo->query("SELECT * FROM `livestock` ORDER BY `livestock_id` DESC")
                 <?php if ($role === 'O'): ?>
                   <td>
                     <a class="btn btn-sm btn-edit" href="livestock.php?edit=<?= urlencode($row['livestock_id']) ?>">EDIT</a>
-                    <a class="btn btn-sm btn-delete" href="livestock.php?delete=<?= urlencode($row['livestock_id']) ?>" onclick="return confirm('Delete record?')">&#128465;</a>
+                    <a class="btn btn-sm btn-delete" href="livestock.php?delete=<?= urlencode($row['livestock_id']) ?>" onclick="return confirm('Delete record?')" title="Delete"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg></a>
                   </td>
                 <?php endif; ?>
               </tr>
