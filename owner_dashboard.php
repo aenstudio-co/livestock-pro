@@ -4,14 +4,14 @@ if (!isset($_SESSION['user_id'])) { header("Location: login.php"); exit; }
 
 $full_name = trim(($_SESSION['first_name'] ?? 'Juan') . ' ' . ($_SESSION['last_name'] ?? 'Dela Cruz'));
 $user_id   = $_SESSION['user_id'];
-$role      = strtoupper($_SESSION['user_type'] ?? 'O');
 $business  = strtoupper($_SESSION['business_name'] ?? 'BUSINESS NAME OWNER');
 
 $total_livestock = (int)$pdo->query("SELECT COALESCE(SUM(quantity), 0) FROM `livestock`")->fetchColumn();
 $total_expenses  = (float)$pdo->query("SELECT COALESCE(SUM(amount), 0) FROM `expenses`")->fetchColumn();
 $total_income    = (float)$pdo->query("SELECT COALESCE(SUM(amount), 0) FROM `sales`")->fetchColumn();
 $profit          = $total_income - $total_expenses;
-$tasks           = $pdo->query("SELECT task_id, task_name, task_description, schedule_date FROM `task_schedule` ORDER BY schedule_date ASC LIMIT 5")->fetchAll();
+
+$tasks = $pdo->query("SELECT task_id, task_name, task_description, schedule_date FROM `task_schedule` ORDER BY schedule_date ASC LIMIT 5")->fetchAll();
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -34,20 +34,18 @@ $tasks           = $pdo->query("SELECT task_id, task_name, task_description, sch
         <li><a href="task_schedule.php">Task Schedule</a></li>
         <li><a href="expenses.php">Expenses</a></li>
         <li><a href="sales.php">Sales</a></li>
-        <li><a href="roi_calculator.php">ROI Calculator</a></li>
         <li><a href="reports.php">Reports</a></li>
-        <li><a href="profile.php">My Profile</a></li>
       </ul>
       <div class="sidebar-user">
         <div class="sidebar-avatar"><?= strtoupper(substr($full_name, 0, 2)) ?></div>
-        <div style="flex:1;">
+        <div>
           <div class="sidebar-user-name"><?= htmlspecialchars($full_name) ?></div>
-          <div class="sidebar-user-id"><?= htmlspecialchars($user_id) ?> &middot; <a href="logout.php" style="color:rgba(255,255,255,0.75);font-size:10px;">Logout</a></div>
+          <div class="sidebar-user-id"><?= htmlspecialchars($user_id) ?></div>
         </div>
       </div>
     </aside>
-    <main class="main-content">
 
+    <main class="main-content">
       <div class="page-header">
         <div>
           <h1 class="page-title">Dashboard</h1>
@@ -90,7 +88,9 @@ $tasks           = $pdo->query("SELECT task_id, task_name, task_description, sch
         <div class="card">
           <div class="card-title">Upcoming Tasks</div>
           <table class="data-table">
-            <thead><tr><th>NO.</th><th>ID.</th><th>TASK</th><th>DESCRIPTION</th><th>DATE</th></tr></thead>
+            <thead>
+              <tr><th>NO.</th><th>ID.</th><th>TASK</th><th>DESCRIPTION</th><th>DATE</th></tr>
+            </thead>
             <tbody>
               <?php foreach ($tasks as $i => $t): ?>
                 <tr>
@@ -104,6 +104,7 @@ $tasks           = $pdo->query("SELECT task_id, task_name, task_description, sch
             </tbody>
           </table>
         </div>
+
         <div class="card">
           <div class="card-title">Recent History</div>
           <?php foreach ($tasks as $t): ?>
