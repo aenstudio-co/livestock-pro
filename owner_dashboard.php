@@ -51,12 +51,11 @@ $tasks           = $pdo->query("SELECT task_id, task_name, task_description, sch
       <div class="page-header">
         <div>
           <h1 class="page-title">Dashboard</h1>
-          <div class="page-subtitle">Welcome, <?= htmlspecialchars($full_name) ?>!</div>
+          <div class="page-subtitle"> Welcome, <?= htmlspecialchars($full_name) ?>!</div>
           <div class="page-meta-tag"><?= htmlspecialchars($business) ?></div>
         </div>
         <div style="display:flex;align-items:center;gap:12px;">
           <span class="page-datetime"><?= date('F d, Y | H:i:s') ?></span>
-          <a href="notifications.php" title="Notifications" style="font-size:18px;text-decoration:none;">&#128276;</a>
         </div>
       </div>
 

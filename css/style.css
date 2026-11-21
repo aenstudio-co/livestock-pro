@@ -236,7 +236,7 @@ textarea.form-control { height: 76px; resize: vertical; }
 .main-content { flex: 1; background-color: var(--bg-page); border-radius: var(--radius-xl); padding: 26px 30px; overflow-y: auto; }
 .page-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 18px; }
 .page-title { font-size: 24px; font-weight: 700; }
-.page-subtitle { font-size: 14px; font-weight: 600; margin-top: 2px; }
+.page-subtitle { font-size: 20px; font-weight: 400; margin-top: 8px; font-style: italic;}
 .page-meta-tag { font-size: 10px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-secondary); margin-top: 2px; }
 .page-datetime { font-size: 11px; color: var(--text-secondary); white-space: nowrap; }
 
