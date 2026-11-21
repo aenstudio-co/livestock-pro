@@ -73,6 +73,7 @@ foreach ($by_exp_cat as $c) {
         </div>
       </div>
       <ul class="sidebar-nav">
+<<<<<<< HEAD:expenses.php
         <li><a href="<?= $role === 'O' ? 'owner_dashboard.php' : 'staff_dashboard.php' ?>">Dashboard</a></li>
         <li><a href="livestock.php">Livestock</a></li>
         <li><a href="task_schedule.php">Task Schedule</a></li>
@@ -81,6 +82,13 @@ foreach ($by_exp_cat as $c) {
         <?php if ($role === 'O'): ?>
           <li><a href="reports.php">Reports</a></li>
         <?php endif; ?>
+=======
+        <li><a href="owner_module/owner_dashboard.php">Dashboard</a></li>
+        <li><a href="owner_module/livestock.php">Livestock</a></li>
+        <li><a href="owner_module/task_schedule.php">Task Schedule</a></li>
+        <li><a class="active" href="owner_module/expenses.php">Expenses</a></li>
+        <li><a href="owner_module/sales.php">Sales</a></li>
+>>>>>>> ce4c4917f1fd5cbe4a7959cd991507382d2951da:owner_module/expenses.php
         <li><a href="profile.php">My Profile</a></li>
       </ul>
       <div class="sidebar-user">

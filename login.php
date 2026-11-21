@@ -28,9 +28,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['user_type']     = strtoupper(trim($user['user_type']));
 
             if ($_SESSION['user_type'] === 'O') {
-                header("Location: owner_dashboard.php");
+                header("Location: owner_module/owner_dashboard.php");
             } else {
-                header("Location: staff_dashboard.php");
+                header("Location: staff_module/staff_dashboard.php");
             }
             exit;
         } else {
