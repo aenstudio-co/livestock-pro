@@ -18,26 +18,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_livestock'])) {
     if ($animal_type !== '' && $quantity > 0) {
         $count  = (int)$pdo->query("SELECT COUNT(*) FROM `livestock`")->fetchColumn() + 1;
         $new_id = sprintf("LIV-%05d", $count);
-        $pdo->prepare("
+
+        $stmt = $pdo->prepare("
             INSERT INTO `livestock`
             (`livestock_id`, `user_id`, `animal_type`, `breed`, `quantity`, `weight`, `health_status`, `vaccination_status`, `vaccination_date`, `date_recorded`)
             VALUES (:lid, :uid, :atype, :breed, :qty, :wt, :hs, :vs, CURDATE(), NOW())
-        ")->execute([
+        ");
+        $stmt->execute([
             'lid'   => $new_id,
             'uid'   => $user_id,
             'atype' => $animal_type,
-            'breed' => $breed ?: 'Native',
+            'breed' => $breed !== '' ? $breed : 'Native',
             'qty'   => $quantity,
             'wt'    => $weight,
             'hs'    => $health,
             'vs'    => $vacc_status
         ]);
-        $message = ($role === 'O') ? "Added {$new_id} to stock." : "Submitted request {$new_id}.";
+        $message = ($role === 'O') ? "Added {$new_id} to stock." : "Submitted livestock request {$new_id}.";
     }
 }
 
 if (isset($_GET['delete']) && $role === 'O') {
-    $pdo->prepare("DELETE FROM `livestock` WHERE `livestock_id` = :lid")->execute(['lid' => $_GET['delete']]);
+    $stmt = $pdo->prepare("DELETE FROM `livestock` WHERE `livestock_id` = :lid");
+    $stmt->execute(['lid' => $_GET['delete']]);
     header("Location: livestock.php");
     exit;
 }
@@ -60,23 +63,25 @@ $records = $pdo->query("SELECT * FROM `livestock` ORDER BY `livestock_id` DESC")
         <div class="sidebar-brand-sub">Farm Management Tracker</div>
       </div>
       <ul class="sidebar-nav">
-        <li><a href="staff_dashboard.php">Dashboard</a></li>
+        <li><a href="<?= $role === 'O' ? 'owner_dashboard.php' : 'staff_dashboard.php' ?>">Dashboard</a></li>
         <li><a class="active" href="livestock.php">Livestock</a></li>
         <li><a href="task_schedule.php">Task Schedule</a></li>
         <li><a href="expenses.php">Expenses</a></li>
         <li><a href="sales.php">Sales</a></li>
-        <li><a href="profile.php">My Profile</a></li>
+        <?php if ($role === 'O'): ?>
+          <li><a href="reports.php">Reports</a></li>
+        <?php endif; ?>
       </ul>
       <div class="sidebar-user">
         <div class="sidebar-avatar"><?= strtoupper(substr($full_name, 0, 2)) ?></div>
-        <div style="flex:1;">
+        <div>
           <div class="sidebar-user-name"><?= htmlspecialchars($full_name) ?></div>
-          <div class="sidebar-user-id"><?= htmlspecialchars($user_id) ?> &middot; <a href="logout.php" style="color:rgba(255,255,255,0.75);font-size:10px;">Logout</a></div>
+          <div class="sidebar-user-id"><?= htmlspecialchars($user_id) ?></div>
         </div>
       </div>
     </aside>
-    <main class="main-content">
 
+    <main class="main-content">
       <div class="page-header">
         <h1 class="page-title">Livestock</h1>
         <div class="page-datetime"><?= date('F d, Y | H:i:s') ?></div>
@@ -102,10 +107,22 @@ $records = $pdo->query("SELECT * FROM `livestock` ORDER BY `livestock_id` DESC")
                 <option value="Duck">Duck</option>
               </select>
             </div>
-            <div class="form-group"><label class="form-label">BREED</label><input class="form-control" type="text" name="breed" required></div>
-            <div class="form-group"><label class="form-label">QUANTITY</label><input class="form-control" type="number" name="quantity" min="1" required></div>
-            <div class="form-group" style="grid-row:span 2;margin-bottom:0;"><label class="form-label">NOTES</label><textarea class="form-control" name="notes"></textarea></div>
-            <div class="form-group"><label class="form-label">WEIGHT (KG)</label><input class="form-control" type="number" step="0.01" name="weight" required></div>
+            <div class="form-group">
+              <label class="form-label">BREED</label>
+              <input class="form-control" type="text" name="breed" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">QUANTITY</label>
+              <input class="form-control" type="number" name="quantity" min="1" required>
+            </div>
+            <div class="form-group" style="grid-row: span 2; margin-bottom:0;">
+              <label class="form-label">NOTES</label>
+              <textarea class="form-control" name="notes"></textarea>
+            </div>
+            <div class="form-group">
+              <label class="form-label">WEIGHT (KG)</label>
+              <input class="form-control" type="number" step="0.01" name="weight" required>
+            </div>
             <div class="form-group">
               <label class="form-label">HEALTH STATUS</label>
               <select class="form-control" name="health_status">
@@ -123,6 +140,7 @@ $records = $pdo->query("SELECT * FROM `livestock` ORDER BY `livestock_id` DESC")
               </select>
             </div>
           </div>
+
           <button class="btn btn-primary" type="submit" name="add_livestock">
             <?= $role === 'O' ? 'ADD TO STOCK' : 'SUBMIT REQUEST' ?>
           </button>
@@ -147,7 +165,7 @@ $records = $pdo->query("SELECT * FROM `livestock` ORDER BY `livestock_id` DESC")
                 <td><?= strtoupper(htmlspecialchars($row['breed'])) ?></td>
                 <td><?= number_format((int)$row['quantity']) ?></td>
                 <td><?= number_format((float)$row['weight'], 2) ?></td>
-                <td><span class="badge badge-completed"><?= strtoupper(htmlspecialchars($row['health_status'])) ?></span></td>
+                <td><span class="badge badge-healthy"><?= strtoupper(htmlspecialchars($row['health_status'])) ?></span></td>
                 <td><?= strtoupper(htmlspecialchars($row['vaccination_status'] ?? 'N/A')) ?></td>
                 <?php if ($role === 'O'): ?>
                   <td>
