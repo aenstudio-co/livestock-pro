@@ -42,15 +42,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
         <div class="form-group">
           <label class="form-label" for="bus_started">BUSINESS STARTED</label>
-          <input class="form-control" type="date" id="bus_started" name="bus_started" required>
+          <input class="form-control" type="date" id="bus_started" name="bus_started" max="<?= date('Y-m-d') ?>" required>
         </div>
         <div class="form-group">
           <label class="form-label" for="TIN_num">TIN NUMBER</label>
-          <input class="form-control" type="text" id="TIN_num" name="TIN_num" required>
+          <input class="form-control" type="text" id="TIN_num" name="TIN_num" placeholder="999-999-999" required>
         </div>
         <div class="form-group">
           <label class="form-label" for="bus_ContactNum">BUSINESS CONTACT NUMBER</label>
-          <input class="form-control" type="text" id="bus_ContactNum" name="bus_ContactNum" required>
+          <input class="form-control" type="text" id="bus_ContactNum" name="bus_ContactNum" placeholder="0999-999-99999" required>
         </div>
         <button class="btn btn-primary btn-block" type="submit">NEXT</button>
       </form>
