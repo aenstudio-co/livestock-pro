@@ -8,6 +8,12 @@ $business = $_SESSION['business_name'] ?? 'Business Name';
 $message  = "";
 $error    = "";
 
+// Flash message after adding capital (prevents duplicate insert on refresh)
+if (isset($_SESSION['flash_message'])) {
+    $message = $_SESSION['flash_message'];
+    unset($_SESSION['flash_message']);
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_profile'])) {
     $fn = trim($_POST['first_name'] ?? '');
     $ln = trim($_POST['last_name'] ?? '');
@@ -46,6 +52,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['manage_account'])) {
     }
 }
 
+// Add Capital (owner only)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_capital']) && $role === 'O') {
+    $cap_amount = (float)($_POST['capital_amount'] ?? 0);
+    $cap_date   = trim($_POST['capital_date'] ?? '');
+    $cap_desc   = trim($_POST['capital_description'] ?? '');
+
+    $date_ok = DateTime::createFromFormat('Y-m-d', $cap_date);
+    if ($cap_amount <= 0) {
+        $error = "Capital amount must be greater than zero.";
+    } elseif (!$date_ok || $date_ok->format('Y-m-d') !== $cap_date) {
+        $error = "Please enter a valid date.";
+    } else {
+        // Generate next ID in the same format: CAP-00001, CAP-00002, ...
+        $max_num = (int)$pdo->query("SELECT COALESCE(MAX(CAST(SUBSTRING(cap_id, 5) AS UNSIGNED)), 0) FROM `capital`")->fetchColumn();
+        $new_cap_id = 'CAP-' . str_pad((string)($max_num + 1), 5, '0', STR_PAD_LEFT);
+
+        $pdo->prepare("INSERT INTO `capital` (`cap_id`, `user_id`, `cap_description`, `cap_amount`, `date_invested`) VALUES (:cid, :uid, :ds, :amt, :dt)")
+            ->execute(['cid' => $new_cap_id, 'uid' => $user_id, 'ds' => $cap_desc, 'amt' => $cap_amount, 'dt' => $cap_date]);
+
+        $_SESSION['flash_message'] = "Capital added successfully.";
+        header("Location: profile.php");
+        exit;
+    }
+}
+
 $stmt_u = $pdo->prepare("SELECT * FROM `user` WHERE `user_id` = :uid LIMIT 1");
 $stmt_u->execute(['uid' => $user_id]);
 $u_row = $stmt_u->fetch() ?: [];
@@ -55,15 +86,14 @@ if ($full_name === '') {
     $full_name = $user_id;
 }
 
-$total_expenses  = (float)$pdo->query("SELECT COALESCE(SUM(amount), 0) FROM `expenses`")->fetchColumn();
 $total_income    = (float)$pdo->query("SELECT COALESCE(SUM(amount), 0) FROM `sales`")->fetchColumn();
-$capital_amount  = $total_expenses;
+$capital_amount  = (float)$pdo->query("SELECT COALESCE(SUM(cap_amount), 0) FROM `capital`")->fetchColumn();
 $completed_tasks = (int)$pdo->query("SELECT COUNT(*) FROM `task_schedule` WHERE `task_status` = 'Completed'")->fetchColumn();
 
 $investment_history = $pdo->query("
-    SELECT expense_id, category, amount, date_recorded, expense_description
-    FROM `expenses`
-    ORDER BY date_recorded DESC, expense_id DESC
+    SELECT cap_id, cap_description, cap_amount, date_invested
+    FROM `capital`
+    ORDER BY date_invested DESC, cap_id DESC
     LIMIT 6
 ")->fetchAll();
 
@@ -208,18 +238,40 @@ $staff_rows = $pdo->query("
         <div>
           <?php if ($role === 'O'): ?>
             <div class="card">
+              <div class="card-title">Add Capital</div>
+              <form method="POST" action="profile.php">
+                <div class="form-group">
+                  <label class="form-label">AMOUNT</label>
+                  <input class="form-control" type="number" name="capital_amount" min="0.01" step="0.01" placeholder="0.00" required>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">DATE</label>
+                  <input class="form-control" type="date" name="capital_date" value="<?= date('Y-m-d') ?>" required>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">DESCRIPTION</label>
+                  <textarea class="form-control" name="capital_description" rows="3" style="resize:vertical;min-height:70px;font-family:inherit;" placeholder="Optional note about this capital"></textarea>
+                </div>
+                <button class="btn btn-primary" type="submit" name="add_capital">ADD CAPITAL</button>
+              </form>
+            </div>
+
+            <div class="card">
               <div class="card-title">Investment History</div>
               <table class="data-table">
                 <thead>
-                  <tr><th>ID.</th><th>CATEGORY</th><th>AMOUNT</th><th>DATE</th></tr>
+                  <tr><th>ID.</th><th>DESCRIPTION</th><th>AMOUNT</th><th>DATE</th></tr>
                 </thead>
                 <tbody>
+                  <?php if (empty($investment_history)): ?>
+                    <tr><td colspan="4" style="text-align:center;color:var(--text-muted);">No capital added yet.</td></tr>
+                  <?php endif; ?>
                   <?php foreach ($investment_history as $inv): ?>
                     <tr>
-                      <td><?= htmlspecialchars($inv['expense_id']) ?></td>
-                      <td><?= strtoupper(htmlspecialchars($inv['category'])) ?></td>
-                      <td>&#8369;<?= number_format((float)$inv['amount'], 0) ?></td>
-                      <td style="white-space:nowrap;"><?= htmlspecialchars(substr($inv['date_recorded'], 0, 10)) ?></td>
+                      <td><?= htmlspecialchars($inv['cap_id']) ?></td>
+                      <td><?= htmlspecialchars(($inv['cap_description'] ?? '') !== '' ? mb_strimwidth($inv['cap_description'], 0, 24, '...') : '-') ?></td>
+                      <td>&#8369;<?= number_format((float)$inv['cap_amount'], 0) ?></td>
+                      <td style="white-space:nowrap;"><?= htmlspecialchars(substr($inv['date_invested'], 0, 10)) ?></td>
                     </tr>
                   <?php endforeach; ?>
                 </tbody>
