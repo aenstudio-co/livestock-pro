@@ -760,3 +760,77 @@ select.form-control option[value=""] {
   font-size: 12px;
   color: var(--text-muted);
 }
+/* ===== Sales & Expenses: summary card ===== */
+.split-grid--summary {
+  grid-template-columns: 1fr 1.5fr;
+}
+
+.summary-card {
+  display: flex;
+  align-items: stretch;
+  gap: 24px;
+}
+
+.summary-card-left {
+  flex: 0 0 190px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.summary-card-left .card-title {
+  margin-bottom: 4px;
+}
+
+.summary-card-left .kpi-value {
+  margin: auto 0;
+}
+
+.summary-card-right {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+.summary-card-right .simple-bar-chart {
+  width: 100%;
+  gap: 8px;
+  padding: 14px 10px;
+  align-items: flex-end;
+}
+
+.summary-card-right .simple-bar-item {
+  min-width: 0;
+  justify-content: flex-end;
+}
+
+.summary-card-right .simple-bar-value {
+  font-size: 9px;
+}
+
+.summary-card-right .simple-bar-fill {
+  max-width: 36px;
+}
+
+.summary-card-right .simple-bar-name {
+  font-size: 9px;
+  line-height: 1.25;
+  word-break: break-word;
+  flex: 0 0 48px;
+  height: 48px;
+  min-height: 48px;
+  overflow: hidden;
+}
+
+@media (max-width: 960px) {
+  .split-grid--summary {
+    grid-template-columns: 1fr;
+  }
+  .summary-card {
+    flex-direction: column;
+  }
+  .summary-card-left {
+    flex: none;
+  }
+}

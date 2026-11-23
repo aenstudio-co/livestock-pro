@@ -1,5 +1,6 @@
 # Project Overview
 LivestockPro
+
 LivestockPro is a web-based livestock management system developed as the final project for Information Management 2 (Database Management System).
 
 The project aims to simplify farm management by automating livestock monitoring, financial tracking, and task scheduling. It provides farmers with a centralized platform to manage records, monitor farm activities, and keep track of financial transactions, reducing reliance on manual record-keeping and supporting more informed decision-making.

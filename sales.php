@@ -69,7 +69,7 @@ foreach ($sales_by_item as $sb) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sales & Income - LivestockPro</title>
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/style.css?v=<?= filemtime(__DIR__ . '/css/style.css') ?>">
 </head>
 <body>
   <div class="app-shell">
@@ -114,7 +114,7 @@ foreach ($sales_by_item as $sb) {
       <?php endif; ?>
 
       <?php if ($role === 'O'): ?>
-        <div class="split-grid">
+        <div class="split-grid split-grid--summary">
           <div class="card">
             <div class="card-title">Record Sale</div>
             <form method="POST" action="sales.php">
@@ -151,30 +151,33 @@ foreach ($sales_by_item as $sb) {
             </form>
           </div>
 
-          <div class="card">
-            <div class="card-title">Sales &amp; Income Summary</div>
-            <div class="kpi-sub">As of <?= date('H:i:s') ?></div>
-            <div class="kpi-value" style="margin-top:8px;">&#8369;<?= number_format($total_sales, 0) ?></div>
-            <a class="kpi-link" href="reports.php">View Full Summary &rarr;</a>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="card-title">Sales by Livestock Graph</div>
-          <?php if (empty($sales_by_item)): ?>
-            <div class="kpi-sub">No sales data available yet.</div>
-          <?php else: ?>
-            <div class="simple-bar-chart">
-              <?php foreach ($sales_by_item as $sb): ?>
-                <?php $bar_h = max(18, (int)round(((float)$sb['total_amt'] / $max_sale_bar) * 120)); ?>
-                <div class="simple-bar-item">
-                  <div class="simple-bar-value">&#8369;<?= number_format((float)$sb['total_amt'], 0) ?></div>
-                  <div class="simple-bar-fill" style="height:<?= $bar_h ?>px;"></div>
-                  <div class="simple-bar-name"><?= htmlspecialchars($sb['item_label']) ?></div>
-                </div>
-              <?php endforeach; ?>
+          <div class="card summary-card">
+            <div class="summary-card-left">
+              <div>
+                <div class="card-title">Sales &amp; Income Summary</div>
+                <div class="kpi-sub">As of <?= date('H:i:s') ?></div>
+              </div>
+              <div class="kpi-value">&#8369;<?= number_format($total_sales, 0) ?></div>
+              <a class="kpi-link" href="reports.php">View Full Summary &rarr;</a>
             </div>
-          <?php endif; ?>
+
+            <div class="summary-card-right">
+              <?php if (empty($sales_by_item)): ?>
+                <div class="kpi-sub">No sales data available yet.</div>
+              <?php else: ?>
+                <div class="simple-bar-chart">
+                  <?php foreach ($sales_by_item as $sb): ?>
+                    <?php $bar_h = max(18, (int)round(((float)$sb['total_amt'] / $max_sale_bar) * 120)); ?>
+                    <div class="simple-bar-item">
+                      <div class="simple-bar-value">&#8369;<?= number_format((float)$sb['total_amt'], 0) ?></div>
+                      <div class="simple-bar-fill" style="height:<?= $bar_h ?>px;"></div>
+                      <div class="simple-bar-name"><?= htmlspecialchars($sb['item_label']) ?></div>
+                    </div>
+                  <?php endforeach; ?>
+                </div>
+              <?php endif; ?>
+            </div>
+          </div>
         </div>
       <?php endif; ?>
 
