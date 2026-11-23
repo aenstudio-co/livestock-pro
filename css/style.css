@@ -55,17 +55,19 @@ a:hover { text-decoration: underline; }
   overflow: hidden;
 }
 
-.auth-back-btn {
+/* ---------- Back button (arrow used on every page that goes back) ---------- */
+.auth-back-btn,
+.auth-wrapper > .auth-back-btn {
   position: fixed !important;
-  top: 28px !important;
-  left: 28px !important;
+  top: 24px !important;
+  left: 24px !important;
   right: auto !important;
   bottom: auto !important;
   margin: 0 !important;
   align-self: flex-start !important;
-  z-index: 50 !important;
-  width: 38px;
-  height: 38px;
+  z-index: 9999 !important;
+  width: 42px;
+  height: 42px;
   border-radius: 50%;
   background-color: var(--bg-card);
   color: var(--teal-900);
@@ -73,9 +75,29 @@ a:hover { text-decoration: underline; }
   align-items: center;
   justify-content: center;
   font-size: 18px;
-  box-shadow: var(--shadow-card);
+  line-height: 1;
+  box-shadow: 0 4px 14px rgba(4, 50, 50, 0.25);
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.auth-back-btn svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+  transition: transform 0.18s ease;
+}
+
+.auth-back-btn:hover {
+  background-color: var(--teal-50);
+  box-shadow: 0 6px 18px rgba(4, 50, 50, 0.32);
   text-decoration: none;
 }
+
+.auth-back-btn:hover svg { transform: translateX(-2px); }
+.auth-back-btn:active { transform: scale(0.94); }
+.auth-back-btn:focus-visible { outline: 3px solid rgba(255, 255, 255, 0.7); outline-offset: 3px; }
 
 .auth-brand { text-align: center; color: var(--text-inverse); margin-bottom: 24px; }
 .auth-brand h1 { font-size: 32px; font-weight: 700; letter-spacing: -0.02em; }
@@ -93,11 +115,19 @@ a:hover { text-decoration: underline; }
 .auth-card-title { font-size: 20px; font-weight: 700; text-align: center; margin-bottom: 20px; }
 .auth-footer-text { text-align: center; font-size: 12px; color: var(--text-secondary); margin-top: 16px; }
 
-.role-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; max-width: 460px; width: 100%; }
+/* ---------- Role select (Owner / Staff cards) ---------- */
+.role-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 26px;
+  max-width: 580px;
+  width: 100%;
+}
+
 .role-card {
   background-color: var(--bg-card);
   border-radius: var(--radius-lg);
-  padding: 28px 20px;
+  padding: 30px 26px 26px;
   text-align: center;
   border: 2px solid transparent;
   box-shadow: var(--shadow-modal);
@@ -105,25 +135,56 @@ a:hover { text-decoration: underline; }
   flex-direction: column;
   align-items: center;
   justify-content: space-between;
-  min-height: 175px;
+  min-height: 270px;
   gap: 18px;
   text-decoration: none;
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
 }
-.role-card:hover { transform: translateY(-3px); border-color: var(--teal-600); text-decoration: none; }
-.role-card-icon { font-size: 36px; color: var(--teal-900); }
-.role-card-btn {
+
+.role-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--teal-600);
+  text-decoration: none;
+}
+
+.role-card-icon {
+  flex: 1;
   width: 100%;
-  padding: 8px 12px;
-  border-radius: var(--radius-sm);
-  border: 1.5px solid var(--teal-900);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--teal-900);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--teal-800);
 }
-.role-card:hover .role-card-btn { background-color: var(--teal-900); color: var(--text-inverse); }
-.auth-helper-note { margin-top: 18px; font-size: 12px; color: rgba(255, 255, 255, 0.8); text-align: center; }
+
+.role-card-icon svg {
+  width: 96px;
+  height: 80px;
+  overflow: visible;
+  display: block;
+}
+
+.role-card-btn {
+  display: block;
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  border: 1.5px solid var(--teal-800);
+  background-color: var(--teal-800);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-inverse);
+  transition: background-color 0.18s ease, border-color 0.18s ease;
+}
+
+.role-card:hover .role-card-btn {
+  background-color: var(--teal-950);
+  border-color: var(--teal-950);
+  color: var(--text-inverse);
+}
+
+.auth-helper-note { margin-top: 20px; font-size: 12px; color: rgba(255, 255, 255, 0.8); text-align: center; }
 
 .business-list { display: flex; flex-direction: column; gap: 8px; max-height: 250px; overflow-y: auto; margin-bottom: 18px; }
 .business-option {
@@ -559,6 +620,11 @@ select.badge {
   .profile-hero, .roi-banner { flex-direction: column; align-items: flex-start; }
 }
 
+/* Role cards stack only on small phones */
+@media (max-width: 560px) {
+  .role-grid { grid-template-columns: 1fr; max-width: 280px; }
+}
+
 .card {
   padding: 22px 24px;
   margin-bottom: 20px;
@@ -652,29 +718,31 @@ select.badge {
   overflow: hidden;
 }
 
+/* Bull watermark (logo) shown behind login / sign-up pages.
+   Pinned to the screen (fixed) so it is always ONE bull at the same size,
+   even if the page content is taller than the window. */
 .auth-wrapper::before {
   content: "";
-  position: absolute;
+  position: fixed;
   inset: 0;
-  background: url("../assets/logo.png") center center / contain no-repeat;
+  background-image: url("../assets/logo.png");
+  background-position: center center;
+  background-size: contain;
+  background-repeat: no-repeat;
   opacity: 0.12;
   pointer-events: none;
   z-index: 0;
 }
 
+/* Safety: a stray logo <img> inside an auth page must never push the layout or show a second bull */
+.auth-wrapper > img.auth-bull,
+.auth-wrapper > img.auth-watermark-bg {
+  display: none !important;
+}
+
 .auth-wrapper > * {
   position: relative;
   z-index: 1;
-}
-
-.auth-wrapper > .auth-back-btn,
-.auth-back-btn {
-  position: fixed !important;
-  top: 24px !important;
-  left: 24px !important;
-  right: auto !important;
-  bottom: auto !important;
-  z-index: 9999 !important;
 }
 
 select.form-control {
