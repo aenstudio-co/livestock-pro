@@ -55,7 +55,6 @@ a:hover { text-decoration: underline; }
   overflow: hidden;
 }
 
-/* ---------- Back button (arrow used on every page that goes back) ---------- */
 .auth-back-btn,
 .auth-wrapper > .auth-back-btn {
   position: fixed !important;
@@ -343,7 +342,7 @@ textarea.form-control { height: 76px; resize: vertical; }
 .kpi-value { font-size: 28px; font-weight: 700; margin: 10px 0 12px; letter-spacing: -0.02em; }
 .kpi-link { font-size: 11px; color: var(--text-primary); font-weight: 500; text-decoration: none; }
 
-.split-grid { display: grid; grid-template-columns: 1.35fr 1fr; gap: 18px; }
+.split-grid { display: grid; grid-template-columns: 1.35fr 1fr; gap: 18px; align-items: start; }
 
 .roi-banner {
   background-color: var(--teal-150);
@@ -647,7 +646,6 @@ select.badge {
   .profile-hero, .roi-banner { flex-direction: column; align-items: flex-start; }
 }
 
-/* Role cards stack only on small phones */
 @media (max-width: 560px) {
   .role-grid { grid-template-columns: 1fr; max-width: 280px; }
 }
@@ -745,9 +743,6 @@ select.badge {
   overflow: hidden;
 }
 
-/* Bull watermark (logo) shown behind login / sign-up pages.
-   Pinned to the screen (fixed) so it is always ONE bull at the same size,
-   even if the page content is taller than the window. */
 .auth-wrapper::before {
   content: "";
   position: fixed;
@@ -761,7 +756,6 @@ select.badge {
   z-index: 0;
 }
 
-/* Safety: a stray logo <img> inside an auth page must never push the layout or show a second bull */
 .auth-wrapper > img.auth-bull,
 .auth-wrapper > img.auth-watermark-bg {
   display: none !important;

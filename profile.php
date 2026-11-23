@@ -8,7 +8,6 @@ $business = $_SESSION['business_name'] ?? 'Business Name';
 $message  = "";
 $error    = "";
 
-// Flash message after adding capital (prevents duplicate insert on refresh)
 if (isset($_SESSION['flash_message'])) {
     $message = $_SESSION['flash_message'];
     unset($_SESSION['flash_message']);
@@ -89,7 +88,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['manage_account'])) {
     }
 }
 
-// Add Capital (owner only)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_capital']) && $role === 'O') {
     $cap_amount = (float)($_POST['capital_amount'] ?? 0);
     $cap_date   = trim($_POST['capital_date'] ?? '');
@@ -121,7 +119,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_capital']) && $ro
         exit;
     }
 }
-
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['approve_staff_uid']) && $role === 'O') {
     $target_uid = trim($_POST['approve_staff_uid'] ?? '');
@@ -185,7 +182,6 @@ if ($role === 'O') {
     $stmt_c->execute(['uid' => $user_id]);
     $completed_tasks = (int)$stmt_c->fetchColumn();
 
-    // Only tasks belonging to the logged-in staff member ($user_id)
     $stmt_th = $pdo->prepare("
         SELECT task_id, task_name, task_description, schedule_date
         FROM `task_schedule`
@@ -251,6 +247,23 @@ $pending_staff_rows = $pending_staff_stmt->fetchAll();
       border: none;
       border-top: 1px solid var(--border-subtle);
       margin: 16px 0 18px;
+    }
+    .profile-col-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      min-width: 0;
+    }
+    .profile-col-stack > .card {
+      margin-bottom: 0;
+    }
+    .staff-approval-empty {
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+    .btn-approve-staff {
+      padding: 5px 12px;
+      font-size: 10px;
     }
     @media (max-width: 960px) {
       .staff-hero-stats {
@@ -354,7 +367,7 @@ $pending_staff_rows = $pending_staff_stmt->fetchAll();
       </div>
 
       <div class="split-grid">
-        <div>
+        <div class="profile-col-stack">
           <div class="card">
             <div class="card-title">Edit Personal Information</div>
             <form method="POST" action="profile.php">
@@ -423,9 +436,34 @@ $pending_staff_rows = $pending_staff_stmt->fetchAll();
               <button class="btn btn-primary" type="submit" name="manage_account">UPDATE ACCOUNT</button>
             </form>
           </div>
+
+          <?php if ($role === 'O'): ?>
+            <div class="card">
+              <div class="card-title">Staff List</div>
+              <table class="data-table">
+                <thead><tr><th>USERNAME</th><th>NAME</th><th>DATE STARTED</th></tr></thead>
+                <tbody>
+                  <?php foreach ($staff_rows as $sr): ?>
+                    <?php
+                      $dhRaw = trim((string)($sr['date_hired'] ?? ''));
+                      $isPendingDate = ($dhRaw === '' || $dhRaw === '1000-01-01' || $dhRaw === '1970-01-01' || $dhRaw === '0000-00-00');
+                      $dhDisplay = (!$isPendingDate && strtotime($dhRaw) !== false)
+                          ? date('n/j/Y', strtotime($dhRaw))
+                          : 'Pending';
+                    ?>
+                    <tr>
+                      <td><?= htmlspecialchars($sr['user_id']) ?></td>
+                      <td><?= strtoupper(htmlspecialchars($sr['first_name'] . ' ' . $sr['last_name'])) ?></td>
+                      <td style="white-space:nowrap;"><?= htmlspecialchars($dhDisplay) ?></td>
+                    </tr>
+                  <?php endforeach; ?>
+                </tbody>
+              </table>
+            </div>
+          <?php endif; ?>
         </div>
 
-        <div>
+        <div class="profile-col-stack">
           <?php if ($role === 'O'): ?>
             <div class="card">
               <div class="card-title">Add Capital</div>
@@ -467,7 +505,8 @@ $pending_staff_rows = $pending_staff_stmt->fetchAll();
                 </tbody>
               </table>
             </div>
-<div class="card staff-approval-card">
+
+            <div class="card staff-approval-card">
               <div class="card-title">Pending Staff Approvals</div>
               <?php if (empty($pending_staff_rows)): ?>
                 <div class="staff-approval-empty">No pending staff requests for <?= htmlspecialchars($business) ?>.</div>
@@ -521,31 +560,30 @@ $pending_staff_rows = $pending_staff_stmt->fetchAll();
                 </tbody>
               </table>
             </div>
-          <?php endif; ?>
-            </div>
 
-          <div class="card">
-            <div class="card-title">Staff List</div>
-            <table class="data-table">
-              <thead><tr><th>USERNAME</th><th>NAME</th><th>DATE STARTED</th></tr></thead>
-              <tbody>
-                <?php foreach ($staff_rows as $sr): ?>
-                  <?php
-                    $dhRaw = trim((string)($sr['date_hired'] ?? ''));
-                    $isPendingDate = ($dhRaw === '' || $dhRaw === '1000-01-01' || $dhRaw === '1970-01-01' || $dhRaw === '0000-00-00');
-                    $dhDisplay = (!$isPendingDate && strtotime($dhRaw) !== false)
-                        ? date('n/j/Y', strtotime($dhRaw))
-                        : 'Pending';
-                  ?>
-                  <tr>
-                    <td><?= htmlspecialchars($sr['user_id']) ?></td>
-                    <td><?= strtoupper(htmlspecialchars($sr['first_name'] . ' ' . $sr['last_name'])) ?></td>
-                    <td style="white-space:nowrap;"><?= htmlspecialchars($dhDisplay) ?></td>
-                  </tr>
-                <?php endforeach; ?>
-              </tbody>
-            </table>
-          </div>
+            <div class="card">
+              <div class="card-title">Staff List</div>
+              <table class="data-table">
+                <thead><tr><th>USERNAME</th><th>NAME</th><th>DATE STARTED</th></tr></thead>
+                <tbody>
+                  <?php foreach ($staff_rows as $sr): ?>
+                    <?php
+                      $dhRaw = trim((string)($sr['date_hired'] ?? ''));
+                      $isPendingDate = ($dhRaw === '' || $dhRaw === '1000-01-01' || $dhRaw === '1970-01-01' || $dhRaw === '0000-00-00');
+                      $dhDisplay = (!$isPendingDate && strtotime($dhRaw) !== false)
+                          ? date('n/j/Y', strtotime($dhRaw))
+                          : 'Pending';
+                    ?>
+                    <tr>
+                      <td><?= htmlspecialchars($sr['user_id']) ?></td>
+                      <td><?= strtoupper(htmlspecialchars($sr['first_name'] . ' ' . $sr['last_name'])) ?></td>
+                      <td style="white-space:nowrap;"><?= htmlspecialchars($dhDisplay) ?></td>
+                    </tr>
+                  <?php endforeach; ?>
+                </tbody>
+              </table>
+            </div>
+          <?php endif; ?>
         </div>
       </div>
     </main>
