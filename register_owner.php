@@ -38,7 +38,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <form method="POST" action="register_owner.php">
         <div class="form-group">
           <label class="form-label" for="business_name">BUSINESS NAME</label>
-          <input class="form-control" type="text" id="business_name" name="business_name" placeholder="ex: Juan's Farm" required>
+          <input class="form-control" type="text" id="business_name" name="business_name" required>
         </div>
         <div class="form-group">
           <label class="form-label" for="bus_started">BUSINESS STARTED</label>
@@ -46,11 +46,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
         <div class="form-group">
           <label class="form-label" for="TIN_num">TIN NUMBER</label>
-          <input class="form-control" type="text" id="TIN_num" name="TIN_num" placeholder="999-999-999" required>
+          <input class="form-control" type="text" id="TIN_num" name="TIN_num" required>
         </div>
         <div class="form-group">
           <label class="form-label" for="bus_ContactNum">BUSINESS CONTACT NUMBER</label>
-          <input class="form-control" type="text" id="bus_ContactNum" name="bus_ContactNum" placeholder="09XX-XXX-XXXX" required>
+          <input class="form-control" type="text" id="bus_ContactNum" name="bus_ContactNum" required>
         </div>
         <button class="btn btn-primary btn-block" type="submit">NEXT</button>
       </form>
