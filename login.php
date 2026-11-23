@@ -14,8 +14,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $user = $stmt->fetch();
 
         $ok = false;
-        if ($user && (password_verify($password, $user['password']) || hash_equals((string)$user['password'], $password))) {
-            $ok = true;
+        if ($user) {
+            $storedPassword = (string)$user['password'];
+            // Works when typing the original password OR pasting/typing the exact stored hash
+            if (password_verify($password, $storedPassword) || hash_equals($storedPassword, $password)) {
+                $ok = true;
+            }
         }
 
         if ($ok) {
