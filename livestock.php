@@ -7,6 +7,11 @@ $user_id   = $_SESSION['user_id'];
 $role      = strtoupper($_SESSION['user_type'] ?? 'O');
 $message   = "";
 
+if (isset($_SESSION['flash_message'])) {
+    $message = $_SESSION['flash_message'];
+    unset($_SESSION['flash_message']);
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_livestock'])) {
     $animal_type = trim($_POST['animal_type'] ?? '');
     $breed       = trim($_POST['breed'] ?? '');
@@ -16,8 +21,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_livestock'])) {
     $vacc_status = trim($_POST['vaccination_status'] ?? 'Vaccinated');
 
     if ($animal_type !== '' && $quantity > 0) {
-        $count  = (int)$pdo->query("SELECT COUNT(*) FROM `livestock`")->fetchColumn() + 1;
-        $new_id = sprintf("LIV-%05d", $count);
+        $max_num = (int)$pdo->query("SELECT COALESCE(MAX(CAST(SUBSTRING(`livestock_id`, 5) AS UNSIGNED)), 0) FROM `livestock`")->fetchColumn();
+        $new_id  = sprintf("LIV-%05d", $max_num + 1);
 
         $stmt = $pdo->prepare("
             INSERT INTO `livestock`
@@ -34,13 +39,54 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_livestock'])) {
             'hs'    => $health,
             'vs'    => $vacc_status
         ]);
-        $message = ($role === 'O') ? "Added {$new_id} to stock." : "Submitted livestock request {$new_id}.";
+        $_SESSION['flash_message'] = ($role === 'O') ? "Added {$new_id} to stock." : "Submitted livestock request {$new_id}.";
+        header("Location: livestock.php");
+        exit;
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_livestock']) && $role === 'O') {
+    $edit_id     = trim($_POST['livestock_id'] ?? '');
+    $animal_type = trim($_POST['animal_type'] ?? '');
+    $breed       = trim($_POST['breed'] ?? '');
+    $quantity    = (int)($_POST['quantity'] ?? 0);
+    $weight      = (float)($_POST['weight'] ?? 0);
+    $health      = trim($_POST['health_status'] ?? 'Healthy');
+    $vacc_status = trim($_POST['vaccination_status'] ?? 'Vaccinated');
+
+    if ($edit_id !== '' && $animal_type !== '' && $quantity > 0) {
+        $stmt = $pdo->prepare("
+            UPDATE `livestock`
+            SET `animal_type` = :atype,
+                `breed` = :breed,
+                `quantity` = :qty,
+                `weight` = :wt,
+                `health_status` = :hs,
+                `vaccination_status` = :vs
+            WHERE `livestock_id` = :lid
+        ");
+        $stmt->execute([
+            'atype' => $animal_type,
+            'breed' => $breed !== '' ? $breed : 'Native',
+            'qty'   => $quantity,
+            'wt'    => $weight,
+            'hs'    => $health,
+            'vs'    => $vacc_status,
+            'lid'   => $edit_id
+        ]);
+        $_SESSION['flash_message'] = "Updated {$edit_id}.";
+        header("Location: livestock.php");
+        exit;
     }
 }
 
 if (isset($_GET['delete']) && $role === 'O') {
-    $stmt = $pdo->prepare("DELETE FROM `livestock` WHERE `livestock_id` = :lid");
-    $stmt->execute(['lid' => $_GET['delete']]);
+    $del_id = trim($_GET['delete']);
+    if ($del_id !== '') {
+        $stmt = $pdo->prepare("DELETE FROM `livestock` WHERE `livestock_id` = :lid");
+        $stmt->execute(['lid' => $del_id]);
+        $_SESSION['flash_message'] = "Deleted {$del_id}.";
+    }
     header("Location: livestock.php");
     exit;
 }
@@ -175,7 +221,19 @@ $records = $pdo->query("SELECT * FROM `livestock` ORDER BY `livestock_id` DESC")
                 <td><?= strtoupper(htmlspecialchars($row['vaccination_status'] ?? 'N/A')) ?></td>
                 <?php if ($role === 'O'): ?>
                   <td>
-                    <a class="btn btn-sm btn-edit" href="livestock.php?edit=<?= urlencode($row['livestock_id']) ?>">EDIT</a>
+                    <button
+                      type="button"
+                      class="btn btn-sm btn-edit"
+                      onclick='openEditModal(<?= json_encode([
+                        "livestock_id"       => $row["livestock_id"],
+                        "animal_type"        => $row["animal_type"],
+                        "breed"              => $row["breed"],
+                        "quantity"           => (int)$row["quantity"],
+                        "weight"             => (float)$row["weight"],
+                        "health_status"      => $row["health_status"],
+                        "vaccination_status" => $row["vaccination_status"] ?? "Vaccinated"
+                      ], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>)'
+                    >EDIT</button>
                     <a class="btn btn-sm btn-delete" href="livestock.php?delete=<?= urlencode($row['livestock_id']) ?>" onclick="return confirm('Delete record?')" title="Delete"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg></a>
                   </td>
                 <?php endif; ?>
@@ -186,5 +244,83 @@ $records = $pdo->query("SELECT * FROM `livestock` ORDER BY `livestock_id` DESC")
       </div>
     </main>
   </div>
+
+  <?php if ($role === 'O'): ?>
+    <div class="modal-backdrop" id="editLivestockModal" onclick="if (event.target === this) closeEditModal()">
+      <div class="modal-box">
+        <div class="modal-header">
+          <div class="card-title" style="margin-bottom:0;">Edit Livestock (<span id="editModalIdLabel"></span>)</div>
+          <button type="button" class="modal-close" onclick="closeEditModal()" aria-label="Close">&times;</button>
+        </div>
+        <form method="POST" action="livestock.php">
+          <input type="hidden" name="livestock_id" id="editLivestockId">
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label class="form-label">SELECT ANIMAL</label>
+              <select class="form-control" name="animal_type" id="editAnimalType" required>
+                <option value="">Select Animal</option>
+                <option value="Carabao">Carabao</option>
+                <option value="Cattle">Cattle</option>
+                <option value="Swine">Swine</option>
+                <option value="Goat">Goat</option>
+                <option value="Chicken">Chicken</option>
+                <option value="Duck">Duck</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">BREED</label>
+              <input class="form-control" type="text" name="breed" id="editBreed" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">QUANTITY</label>
+              <input class="form-control" type="number" name="quantity" id="editQuantity" min="1" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">WEIGHT (KG)</label>
+              <input class="form-control" type="number" step="0.01" name="weight" id="editWeight" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">HEALTH STATUS</label>
+              <select class="form-control" name="health_status" id="editHealthStatus">
+                <option value="Healthy">Healthy</option>
+                <option value="Sick">Sick</option>
+                <option value="Recovered">Recovered</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">VACCINATION STATUS</label>
+              <select class="form-control" name="vaccination_status" id="editVaccStatus">
+                <option value="Vaccinated">Vaccinated</option>
+                <option value="Unvaccinated">Unvaccinated</option>
+                <option value="Partial">Partial</option>
+              </select>
+            </div>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn" onclick="closeEditModal()">CANCEL</button>
+            <button type="submit" class="btn btn-primary" name="edit_livestock">SAVE CHANGES</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <script>
+      function openEditModal(row) {
+        document.getElementById('editLivestockId').value = row.livestock_id;
+        document.getElementById('editModalIdLabel').textContent = row.livestock_id;
+        document.getElementById('editAnimalType').value = row.animal_type;
+        document.getElementById('editBreed').value = row.breed;
+        document.getElementById('editQuantity').value = row.quantity;
+        document.getElementById('editWeight').value = row.weight;
+        document.getElementById('editHealthStatus').value = row.health_status;
+        document.getElementById('editVaccStatus').value = row.vaccination_status;
+        document.getElementById('editLivestockModal').classList.add('is-open');
+      }
+
+      function closeEditModal() {
+        document.getElementById('editLivestockModal').classList.remove('is-open');
+      }
+    </script>
+  <?php endif; ?>
 </body>
 </html>
