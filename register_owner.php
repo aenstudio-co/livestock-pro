@@ -1,15 +1,26 @@
 <?php
 require_once 'includes/db_connect.php';
+$error = "";
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $_SESSION['signup_role'] = 'O';
-    $_SESSION['signup_business_info'] = [
-        'business_name'  => trim($_POST['business_name'] ?? ''),
-        'bus_started'    => trim($_POST['bus_started'] ?? ''),
-        'TIN_num'        => trim($_POST['TIN_num'] ?? ''),
-        'bus_ContactNum' => trim($_POST['bus_ContactNum'] ?? '')
-    ];
-    header("Location: register_personal.php");
-    exit;
+    $business_name  = trim($_POST['business_name'] ?? '');
+    $bus_started    = trim($_POST['bus_started'] ?? '');
+    $tin_num        = trim($_POST['TIN_num'] ?? '');
+    $bus_contact    = trim($_POST['bus_ContactNum'] ?? '');
+
+    if ($business_name === '') {
+        $error = "Business name is required.";
+    } else {
+        $_SESSION['signup_role'] = 'O';
+        $_SESSION['signup_business_info'] = [
+            'business_name'  => $business_name,
+            'bus_started'    => $bus_started,
+            'TIN_num'        => $tin_num,
+            'bus_ContactNum' => $bus_contact
+        ];
+        header("Location: register_personal.php");
+        exit;
+    }
 }
 ?>
 <!DOCTYPE html>
@@ -35,6 +46,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </div>
     <div class="auth-card">
       <h2 class="auth-card-title">Business Information</h2>
+
+      <?php if ($error !== ""): ?>
+        <div class="alert alert-error"><?= htmlspecialchars($error) ?></div>
+      <?php endif; ?>
+
       <form method="POST" action="register_owner.php">
         <div class="form-group">
           <label class="form-label" for="business_name">BUSINESS NAME</label>
@@ -46,11 +62,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
         <div class="form-group">
           <label class="form-label" for="TIN_num">TIN NUMBER</label>
-          <input class="form-control" type="text" id="TIN_num" name="TIN_num" placeholder="999-999-999" required>
+          <input class="form-control" type="text" id="TIN_num" name="TIN_num" placeholder="999-999-999" maxlength="15" required>
         </div>
         <div class="form-group">
           <label class="form-label" for="bus_ContactNum">BUSINESS CONTACT NUMBER</label>
-          <input class="form-control" type="text" id="bus_ContactNum" name="bus_ContactNum" placeholder="0999-999-99999" required>
+          <input class="form-control" type="text" id="bus_ContactNum" name="bus_ContactNum" placeholder="0999-999-99999" maxlength="15" required>
         </div>
         <button class="btn btn-primary btn-block" type="submit">NEXT</button>
       </form>
