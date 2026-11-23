@@ -1,11 +1,13 @@
 <?php
 require_once 'includes/db_connect.php';
 $businesses = $pdo->query("
-    SELECT DISTINCT u.business_name
+    SELECT DISTINCT TRIM(u.business_name) AS business_name
     FROM `owner` o
     JOIN `user` u ON o.user_id = u.user_id
-    WHERE u.business_name IS NOT NULL AND u.business_name != ''
-    ORDER BY u.business_name ASC
+    WHERE u.business_name IS NOT NULL
+      AND TRIM(u.business_name) != ''
+      AND LOWER(TRIM(u.business_name)) != 'juan\'s farm'
+    ORDER BY business_name ASC
 ")->fetchAll();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -43,12 +45,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
         <div class="form-label">RECOMMENDED</div>
         <div class="business-list" id="farmList">
-          <?php foreach ($businesses as $b): ?>
-            <label class="business-option farm-item">
-              <input type="radio" name="business_name" value="<?= htmlspecialchars($b['business_name']) ?>" required>
-              <span><?= htmlspecialchars($b['business_name']) ?></span>
-            </label>
-          <?php endforeach; ?>
+          <?php if (empty($businesses)): ?>
+            <div style="font-size:12px;color:var(--text-muted);padding:8px 0;">No registered businesses found in the database.</div>
+          <?php else: ?>
+            <?php foreach ($businesses as $b): ?>
+              <label class="business-option farm-item">
+                <input type="radio" name="business_name" value="<?= htmlspecialchars($b['business_name']) ?>" required>
+                <span><?= htmlspecialchars($b['business_name']) ?></span>
+              </label>
+            <?php endforeach; ?>
+          <?php endif; ?>
         </div>
         <button class="btn btn-primary btn-block" type="submit">CONTINUE</button>
       </form>
