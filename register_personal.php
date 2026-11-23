@@ -16,6 +16,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $new_user_id = sprintf("USE-%05d", $uCount);
         $new_addr_id = sprintf("ADD-%05d", $aCount);
 
+        $fn = trim($_POST['first_name'] ?? '');
+        $ln = trim($_POST['last_name'] ?? '');
+        $email = trim($_POST['email'] ?? '');
+
+        $rawBase = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $fn . $ln));
+        if ($rawBase === '' && str_contains($email, '@')) {
+            $rawBase = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', strstr($email, '@', true)));
+        }
+        if ($rawBase === '') {
+            $rawBase = strtolower($new_user_id);
+        }
+
+        $username = $rawBase;
+        $checkStmt = $pdo->prepare("SELECT COUNT(*) FROM `user` WHERE `username` = :uname");
+        $suffix = 1;
+        while (true) {
+            $checkStmt->execute(['uname' => $username]);
+            if ((int)$checkStmt->fetchColumn() === 0) {
+                break;
+            }
+            $username = $rawBase . $suffix;
+            $suffix++;
+        }
+
         $pdo->prepare("
             INSERT INTO `address` (`address_id`, `user_id`, `HouseNumber`, `Street`, `Barangay`, `Municipality_City`, `Province`, `ZipCode`)
             VALUES (:aid, :uid, :hn, :st, :brgy, :muni, :prov, :zip)
@@ -36,10 +60,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ")->execute([
             'uid'   => $new_user_id,
             'bname' => $business_name,
-            'fn'    => trim($_POST['first_name'] ?? ''),
-            'ln'    => trim($_POST['last_name'] ?? ''),
-            'email' => trim($_POST['email'] ?? ''),
-            'uname' => trim($_POST['username'] ?? ''),
+            'fn'    => $fn,
+            'ln'    => $ln,
+            'email' => $email,
+            'uname' => $username,
             'pw'    => password_hash(trim($_POST['password'] ?? ''), PASSWORD_DEFAULT),
             'bday'  => trim($_POST['birthdate'] ?? ''),
             'sex'   => trim($_POST['sex'] ?? 'Male'),
@@ -105,16 +129,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           <div>
             <div class="card-title">Personal</div>
             <div class="form-group"><label class="form-label">EMAIL</label><input class="form-control" type="email" name="email" required></div>
-            <div class="form-group"><label class="form-label">USERNAME</label><input class="form-control" type="text" name="username" required></div>
             <div class="form-group"><label class="form-label">PASSWORD</label><input class="form-control" type="password" name="password" required></div>
             <div class="form-group"><label class="form-label">FIRST NAME</label><input class="form-control" type="text" name="first_name" required></div>
             <div class="form-group"><label class="form-label">LAST NAME</label><input class="form-control" type="text" name="last_name" required></div>
-            <div class="form-group"><label class="form-label">BIRTHDATE</label><input class="form-control" type="date" name="birthdate" required></div>
-            <div class="form-group">
-              <label class="form-label">SEX</label>
-              <div style="display:flex;gap:14px;align-items:center;height:38px;">
-                <label><input type="radio" name="sex" value="Male" checked> Male</label>
-                <label><input type="radio" name="sex" value="Female"> Female</label>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+              <div class="form-group">
+                <label class="form-label">BIRTHDATE</label>
+                <input class="form-control" type="date" name="birthdate" required>
+              </div>
+              <div class="form-group">
+                <label class="form-label">SEX</label>
+                <div style="display:flex;gap:14px;align-items:center;height:38px;">
+                  <label><input type="radio" name="sex" value="Male" checked> Male</label>
+                  <label><input type="radio" name="sex" value="Female"> Female</label>
+                </div>
               </div>
             </div>
             <div class="form-group"><label class="form-label">CONTACT NUMBER</label><input class="form-control" type="text" name="contact_number" required></div>
