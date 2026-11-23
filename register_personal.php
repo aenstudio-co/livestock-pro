@@ -7,6 +7,16 @@ $business_name = ($role === 'O')
     ? ($_SESSION['signup_business_info']['business_name'] ?? '')
     : ($_SESSION['signup_business'] ?? '');
 
+if ($role === 'O' && empty($_SESSION['signup_business_info'])) {
+    header("Location: register_owner.php");
+    exit;
+}
+
+if ($role === 'S' && trim($business_name) === '') {
+    header("Location: register_staff.php");
+    exit;
+}
+
 $today = date('Y-m-d');
 $maxBirthdate = date('Y-m-d', strtotime('-1 day'));
 $error = "";
@@ -28,17 +38,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo->beginTransaction();
         $pdo->exec("SET FOREIGN_KEY_CHECKS = 0");
 
-        $uCount = (int)$pdo->query("SELECT COUNT(*) FROM `user`")->fetchColumn() + 1;
-        $aCount = (int)$pdo->query("SELECT COUNT(*) FROM `address`")->fetchColumn() + 1;
-        $new_user_id = sprintf("USE-%05d", $uCount);
-        $new_addr_id = sprintf("ADD-%05d", $aCount);
+        $uMax = (int)$pdo->query("SELECT COALESCE(MAX(CAST(SUBSTRING(`user_id`, 5) AS UNSIGNED)), 0) FROM `user`")->fetchColumn() + 1;
+        $aMax = (int)$pdo->query("SELECT COALESCE(MAX(CAST(SUBSTRING(`address_id`, 5) AS UNSIGNED)), 0) FROM `address`")->fetchColumn() + 1;
+        $new_user_id = sprintf("USE-%05d", $uMax);
+        $new_addr_id = sprintf("ADD-%05d", $aMax);
 
         $cleanFirst = preg_replace('/[^a-zA-Z]/', '', $fn);
         $baseUname = ($cleanFirst !== '' ? ucfirst(strtolower($cleanFirst)) : 'User');
-        $username = sprintf("%s%02d", $baseUname, $uCount);
+        $username = sprintf("%s%02d", $baseUname, $uMax);
 
         $checkStmt = $pdo->prepare("SELECT COUNT(*) FROM `user` WHERE `username` = :uname");
-        $suffix = $uCount + 1;
+        $suffix = $uMax + 1;
         while (true) {
             $checkStmt->execute(['uname' => $username]);
             if ((int)$checkStmt->fetchColumn() === 0) {
@@ -47,8 +57,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $username = sprintf("%s%02d", $baseUname, $suffix);
             $suffix++;
         }
-
-        $hashedPassword = password_hash($rawPassword, PASSWORD_DEFAULT);
 
         $pdo->prepare("
             INSERT INTO `user` (`user_id`, `business_name`, `first_name`, `last_name`, `email`, `username`, `password`, `birthdate`, `sex`, `contact_number`, `address_id`, `user_type`)
@@ -60,7 +68,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'ln'    => $ln,
             'email' => $email,
             'uname' => $username,
-            'pw'    => $hashedPassword,
+            'pw'    => $rawPassword,
             'bday'  => $bday,
             'sex'   => $sex,
             'cnum'  => $cnum,
@@ -96,7 +104,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ]);
         } else {
             $pdo->prepare("INSERT INTO `staff` (`user_id`, `date_hired`) VALUES (:uid, :dhired)")
-                ->execute(['uid' => $new_user_id, 'dhired' => date('Y-m-d')]);
+                ->execute(['uid' => $new_user_id, 'dhired' => '1000-01-01']);
         }
 
         $pdo->exec("SET FOREIGN_KEY_CHECKS = 1");
@@ -143,7 +151,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           <div>
             <div class="card-title">Personal</div>
             <div class="form-group"><label class="form-label">EMAIL</label><input class="form-control" type="email" name="email" required></div>
-            <div class="form-group"><label class="form-label">PASSWORD</label><input class="form-control" type="password" name="password" required></div>
+            <div class="form-group"><label class="form-label">PASSWORD</label><input class="form-control" type="password" name="password" maxlength="25" required></div>
             <div class="form-group"><label class="form-label">FIRST NAME</label><input class="form-control" type="text" name="first_name" required></div>
             <div class="form-group"><label class="form-label">LAST NAME</label><input class="form-control" type="text" name="last_name" required></div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
