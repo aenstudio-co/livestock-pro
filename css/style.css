@@ -760,7 +760,7 @@ select.form-control option[value=""] {
   font-size: 12px;
   color: var(--text-muted);
 }
-/* ===== Sales & Expenses: summary card ===== */
+
 .split-grid--summary {
   grid-template-columns: 1fr 1.5fr;
 }
