@@ -11,7 +11,6 @@ $message   = "";
 
 $allowed_status = ['Pending', 'In Progress', 'Completed', 'Cancelled'];
 
-/* ---------- Staff list (used for name lookup + owner's assign dropdown) ---------- */
 $staff_rows = $pdo->query("
     SELECT u.user_id, u.first_name, u.last_name
     FROM `staff` s
@@ -27,7 +26,6 @@ if (!isset($staff_map[$user_id])) {
     $staff_map[$user_id] = $full_name;
 }
 
-/* ---------- ADD TASK (owner only) ---------- */
 if ($is_owner && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_task'])) {
     $tname          = trim($_POST['task_name'] ?? '');
     $sdate          = substr(trim($_POST['schedule_date'] ?? date('Y-m-d')), 0, 10);
@@ -36,7 +34,6 @@ if ($is_owner && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_task
     $target_user_id = ($assigned_staff !== '') ? $assigned_staff : $user_id;
 
     if ($tname !== '') {
-        // Use the highest existing number so IDs never collide after a delete
         $max    = (int)$pdo->query("SELECT COALESCE(MAX(CAST(SUBSTRING(`task_id`, 5) AS UNSIGNED)), 0) FROM `task_schedule`")->fetchColumn();
         $new_id = sprintf("TSK-%05d", $max + 1);
 
@@ -55,7 +52,6 @@ if ($is_owner && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_task
     }
 }
 
-/* ---------- EDIT TASK (owner only) ---------- */
 if ($is_owner && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_task'])) {
     $tid   = trim($_POST['task_id'] ?? '');
     $tname = trim($_POST['task_name'] ?? '');
@@ -81,7 +77,6 @@ if ($is_owner && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_tas
     exit;
 }
 
-/* ---------- UPDATE STATUS (owner: any task | staff: only their own) ---------- */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_status'])) {
     $new_status = $_POST['task_status'] ?? '';
     $tid        = $_POST['task_id'] ?? '';
@@ -99,7 +94,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_status'])) {
     exit;
 }
 
-/* ---------- DELETE TASK (owner only) ---------- */
 if ($is_owner && isset($_GET['delete'])) {
     $stmt = $pdo->prepare("DELETE FROM `task_schedule` WHERE `task_id` = :tid");
     $stmt->execute(['tid' => $_GET['delete']]);
@@ -107,13 +101,10 @@ if ($is_owner && isset($_GET['delete'])) {
     exit;
 }
 
-/* ---------- LOAD DATA ---------- */
 if ($is_owner) {
-    // Owner sees every task
     $pending   = $pdo->query("SELECT * FROM `task_schedule` WHERE `task_status` != 'Completed' ORDER BY `task_id` DESC")->fetchAll();
     $completed = $pdo->query("SELECT * FROM `task_schedule` WHERE `task_status` = 'Completed' ORDER BY `task_id` DESC")->fetchAll();
 } else {
-    // Staff sees only tasks assigned to them
     $stmt = $pdo->prepare("SELECT * FROM `task_schedule` WHERE `user_id` = :uid AND `task_status` != 'Completed' ORDER BY `task_id` DESC");
     $stmt->execute(['uid' => $user_id]);
     $pending = $stmt->fetchAll();
@@ -123,7 +114,6 @@ if ($is_owner) {
     $completed = $stmt->fetchAll();
 }
 
-// Status counts: owner = every task assigned to anyone, staff = only their own tasks
 $cnt_pending = $cnt_in_progress = $cnt_cancelled = 0;
 foreach ($pending as $t) {
     $s = $t['task_status'] ?? 'Pending';
@@ -133,7 +123,6 @@ foreach ($pending as $t) {
 }
 $cnt_completed = count($completed);
 
-/* ---------- Helper: status dropdown (works for owner and staff) ---------- */
 function render_status_dropdown(array $t, string $status_val): void {
     if ($status_val === 'In Progress')      { $btn_cls = 'is-in-progress'; }
     elseif ($status_val === 'Completed')    { $btn_cls = 'is-completed'; }
@@ -174,7 +163,6 @@ function render_status_dropdown(array $t, string $status_val): void {
   <title>Task Schedule - LivestockPro</title>
   <link rel="stylesheet" href="css/style.css">
   <style>
-    /* ----- Staff status banner (prototype: single teal bar with 4 icon + label items) ----- */
     .staff-status-bar {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
@@ -202,7 +190,6 @@ function render_status_dropdown(array $t, string $status_val): void {
       .staff-status-bar { grid-template-columns: repeat(2, 1fr); }
     }
 
-    /* ----- Owner edit button + modal ----- */
     .actions-cell { display: flex; gap: 6px; justify-content: center; align-items: center; }
     .btn-edit {
       background: #e3e7e7; color: #3d4b4b; border: none; cursor: pointer;
@@ -243,14 +230,16 @@ function render_status_dropdown(array $t, string $status_val): void {
         <?php if ($is_owner): ?>
           <li><a href="reports.php">Reports</a></li>
         <?php endif; ?>
-        <li><a href="profile.php">My Profile</a></li>
       </ul>
-      <div class="sidebar-user">
-        <div class="sidebar-avatar"><?= strtoupper(substr($full_name, 0, 2)) ?></div>
-        <div style="flex:1;">
-          <div class="sidebar-user-name"><?= htmlspecialchars($full_name) ?></div>
-          <div class="sidebar-user-id"><?= htmlspecialchars($user_id) ?> &middot; <a href="logout.php" style="color:rgba(255,255,255,0.75);font-size:10px;">Logout</a></div>
-        </div>
+      <div class="sidebar-user-wrap">
+        <a class="sidebar-user-link" href="profile.php">
+          <div class="sidebar-avatar"><?= strtoupper(substr($full_name, 0, 2)) ?></div>
+          <div style="flex:1;">
+            <div class="sidebar-user-name"><?= htmlspecialchars($full_name) ?></div>
+            <div class="sidebar-user-id"><?= htmlspecialchars($user_id) ?></div>
+          </div>
+        </a>
+        <a class="sidebar-logout-link" href="logout.php">Logout</a>
       </div>
     </aside>
 
@@ -264,7 +253,6 @@ function render_status_dropdown(array $t, string $status_val): void {
         <div class="alert alert-success"><?= htmlspecialchars($message) ?></div>
       <?php endif; ?>
 
-      <!-- Status summary: owner = all tasks, staff = only their assigned tasks -->
       <div class="staff-status-bar">
         <div class="staff-status-item">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><circle cx="12" cy="15.5" r="2.5"/><polyline points="12 14.3 12 15.5 12.9 16"/></svg>
@@ -285,8 +273,6 @@ function render_status_dropdown(array $t, string $status_val): void {
       </div>
 
       <?php if ($is_owner): ?>
-      <!-- ===================== OWNER VIEW ===================== -->
-
       <div class="card">
         <div class="card-title">Add Task</div>
         <form method="POST" action="task_schedule.php">
@@ -399,7 +385,6 @@ function render_status_dropdown(array $t, string $status_val): void {
         </table>
       </div>
 
-      <!-- Edit Task modal (owner only) -->
       <div class="modal-backdrop" id="editModal">
         <div class="modal-box">
           <div class="card-title">Edit Task</div>
@@ -441,8 +426,6 @@ function render_status_dropdown(array $t, string $status_val): void {
       </div>
 
       <?php else: ?>
-      <!-- ===================== STAFF VIEW ===================== -->
-
       <div class="card">
         <div class="card-title">Assigned Tasks (<?= count($pending) ?>)</div>
         <table class="data-table">

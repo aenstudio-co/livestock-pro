@@ -972,3 +972,40 @@ select.form-control option[value=""] {
   justify-content: flex-end;
   margin-top: 12px;
 }
+
+.sidebar-user-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.sidebar-user-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  color: var(--text-inverse);
+  text-decoration: none;
+  transition: background-color 0.15s ease;
+}
+
+.sidebar-user-link:hover,
+.sidebar-user-link.active {
+  background-color: rgba(255, 255, 255, 0.12);
+  text-decoration: none;
+}
+
+.sidebar-logout-link {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.72);
+  padding-left: 14px;
+  text-decoration: none;
+}
+
+.sidebar-logout-link:hover {
+  color: var(--text-inverse);
+  text-decoration: underline;
+}

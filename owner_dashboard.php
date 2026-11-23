@@ -4,6 +4,7 @@ if (!isset($_SESSION['user_id'])) { header("Location: login.php"); exit; }
 
 $full_name = trim(($_SESSION['first_name'] ?? 'Juan') . ' ' . ($_SESSION['last_name'] ?? 'Dela Cruz'));
 $user_id   = $_SESSION['user_id'];
+$role      = strtoupper($_SESSION['user_type'] ?? 'O');
 $business  = strtoupper($_SESSION['business_name'] ?? 'BUSINESS NAME OWNER');
 
 $total_livestock = (int)$pdo->query("SELECT COALESCE(SUM(quantity), 0) FROM `livestock`")->fetchColumn();
@@ -34,20 +35,24 @@ $tasks = $pdo->query("SELECT task_id, task_name, task_description, schedule_date
         </div>
       </div>
       <ul class="sidebar-nav">
-        <li><a class="active" href="owner_dashboard.php">Dashboard</a></li>
+        <li><a class="active" href="<?= $role === 'O' ? 'owner_dashboard.php' : 'staff_dashboard.php' ?>">Dashboard</a></li>
         <li><a href="livestock.php">Livestock</a></li>
         <li><a href="task_schedule.php">Task Schedule</a></li>
         <li><a href="expenses.php">Expenses</a></li>
         <li><a href="sales.php">Sales</a></li>
-        <li><a href="reports.php">Reports</a></li>
-        <li><a href="profile.php">My Profile</a></li>
+        <?php if ($role === 'O'): ?>
+          <li><a href="reports.php">Reports</a></li>
+        <?php endif; ?>
       </ul>
-      <div class="sidebar-user">
-        <div class="sidebar-avatar"><?= strtoupper(substr($full_name, 0, 2)) ?></div>
-        <div style="flex:1;">
-          <div class="sidebar-user-name"><?= htmlspecialchars($full_name) ?></div>
-          <div class="sidebar-user-id"><?= htmlspecialchars($user_id) ?> &middot; <a href="logout.php" style="color:rgba(255,255,255,0.75);font-size:10px;">Logout</a></div>
-        </div>
+      <div class="sidebar-user-wrap">
+        <a class="sidebar-user-link" href="profile.php">
+          <div class="sidebar-avatar"><?= strtoupper(substr($full_name, 0, 2)) ?></div>
+          <div style="flex:1;">
+            <div class="sidebar-user-name"><?= htmlspecialchars($full_name) ?></div>
+            <div class="sidebar-user-id"><?= htmlspecialchars($user_id) ?></div>
+          </div>
+        </a>
+        <a class="sidebar-logout-link" href="logout.php">Logout</a>
       </div>
     </aside>
 
@@ -61,8 +66,6 @@ $tasks = $pdo->query("SELECT task_id, task_name, task_description, schedule_date
         <div class="page-datetime"><?= date('F d, Y | H:i:s') ?></div>
       </div>
 
-
-      
       <div class="kpi-grid-4">
         <div class="kpi-card kpi-card--highlight">
           <div class="kpi-label">Total Livestock</div>

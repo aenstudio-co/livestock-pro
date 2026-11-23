@@ -299,14 +299,16 @@ $pending_staff_rows = $pending_staff_stmt->fetchAll();
         <?php if ($role === 'O'): ?>
           <li><a href="reports.php">Reports</a></li>
         <?php endif; ?>
-        <li><a class="active" href="profile.php">My Profile</a></li>
       </ul>
-      <div class="sidebar-user">
-        <div class="sidebar-avatar"><?= strtoupper(substr($full_name, 0, 2)) ?></div>
-        <div style="flex:1;">
-          <div class="sidebar-user-name"><?= htmlspecialchars($full_name) ?></div>
-          <div class="sidebar-user-id"><?= htmlspecialchars($user_id) ?> &middot; <a href="logout.php" style="color:rgba(255,255,255,0.75);font-size:10px;">Logout</a></div>
-        </div>
+      <div class="sidebar-user-wrap">
+        <a class="sidebar-user-link active" href="profile.php">
+          <div class="sidebar-avatar"><?= strtoupper(substr($full_name, 0, 2)) ?></div>
+          <div style="flex:1;">
+            <div class="sidebar-user-name"><?= htmlspecialchars($full_name) ?></div>
+            <div class="sidebar-user-id"><?= htmlspecialchars($user_id) ?></div>
+          </div>
+        </a>
+        <a class="sidebar-logout-link" href="logout.php">Logout</a>
       </div>
     </aside>
 
