@@ -26,6 +26,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         $pdo->beginTransaction();
+        $pdo->exec("SET FOREIGN_KEY_CHECKS = 0");
+
         $uCount = (int)$pdo->query("SELECT COUNT(*) FROM `user`")->fetchColumn() + 1;
         $aCount = (int)$pdo->query("SELECT COUNT(*) FROM `address`")->fetchColumn() + 1;
         $new_user_id = sprintf("USE-%05d", $uCount);
@@ -46,22 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $suffix++;
         }
 
-        // Only the hash is stored in the database
         $hashedPassword = password_hash($rawPassword, PASSWORD_DEFAULT);
-
-        $pdo->prepare("
-            INSERT INTO `address` (`address_id`, `user_id`, `HouseNumber`, `Street`, `Barangay`, `Municipality_City`, `Province`, `ZipCode`)
-            VALUES (:aid, :uid, :hn, :st, :brgy, :muni, :prov, :zip)
-        ")->execute([
-            'aid'  => $new_addr_id,
-            'uid'  => $new_user_id,
-            'hn'   => trim($_POST['HouseNumber'] ?? '') ?: null,
-            'st'   => trim($_POST['Street'] ?? ''),
-            'brgy' => trim($_POST['Barangay'] ?? ''),
-            'muni' => trim($_POST['Municipality_City'] ?? ''),
-            'prov' => trim($_POST['Province'] ?? ''),
-            'zip'  => trim($_POST['ZipCode'] ?? '')
-        ]);
 
         $pdo->prepare("
             INSERT INTO `user` (`user_id`, `business_name`, `first_name`, `last_name`, `email`, `username`, `password`, `birthdate`, `sex`, `contact_number`, `address_id`, `user_type`)
@@ -81,6 +68,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'utype' => $role
         ]);
 
+        $pdo->prepare("
+            INSERT INTO `address` (`address_id`, `user_id`, `HouseNumber`, `Street`, `Barangay`, `Municipality_City`, `Province`, `ZipCode`)
+            VALUES (:aid, :uid, :hn, :st, :brgy, :muni, :prov, :zip)
+        ")->execute([
+            'aid'  => $new_addr_id,
+            'uid'  => $new_user_id,
+            'hn'   => trim($_POST['HouseNumber'] ?? '') ?: null,
+            'st'   => trim($_POST['Street'] ?? ''),
+            'brgy' => trim($_POST['Barangay'] ?? ''),
+            'muni' => trim($_POST['Municipality_City'] ?? ''),
+            'prov' => trim($_POST['Province'] ?? ''),
+            'zip'  => trim($_POST['ZipCode'] ?? '')
+        ]);
+
         if ($role === 'O') {
             $binfo = $_SESSION['signup_business_info'];
             $pdo->prepare("
@@ -98,12 +99,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ->execute(['uid' => $new_user_id, 'dhired' => date('Y-m-d')]);
         }
 
+        $pdo->exec("SET FOREIGN_KEY_CHECKS = 1");
         $pdo->commit();
         unset($_SESSION['signup_role'], $_SESSION['signup_business'], $_SESSION['signup_business_info']);
         header("Location: signup_done.php?mode=" . ($role === 'S' ? 'staff' : 'owner'));
         exit;
     } catch (Exception $e) {
         if ($pdo->inTransaction()) {
+            $pdo->exec("SET FOREIGN_KEY_CHECKS = 1");
             $pdo->rollBack();
         }
         $error = "Registration error: " . $e->getMessage();
@@ -156,7 +159,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
               </div>
             </div>
-            <div class="form-group"><label class="form-label">CONTACT NUMBER</label><input class="form-control" type="text" name="contact_number" required></div>
+            <div class="form-group"><label class="form-label">CONTACT NUMBER</label><input class="form-control" type="text" name="contact_number" placeholder="0999-999-99999" required></div>
           </div>
           <div>
             <div class="card-title">Address</div>
@@ -164,7 +167,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="form-group">
               <label class="form-label" for="provinceInput">PROVINCE</label>
               <div class="searchable-select" id="provinceDropdown">
-                <input class="form-control searchable-select-input" type="text" id="provinceInput" autocomplete="off" required>
+                <input class="form-control searchable-select-input" type="text" id="provinceInput" placeholder="Select province" autocomplete="off" required>
                 <input type="hidden" id="provinceValue" name="Province">
                 <div class="searchable-select-menu" id="provinceMenu"></div>
               </div>
@@ -173,7 +176,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="form-group">
               <label class="form-label" for="cityInput">MUNICIPALITY / CITY</label>
               <div class="searchable-select" id="cityDropdown">
-                <input class="form-control searchable-select-input" type="text" id="cityInput" autocomplete="off" required disabled>
+                <input class="form-control searchable-select-input" type="text" id="cityInput" placeholder="Select municipality / city" autocomplete="off" required disabled>
                 <input type="hidden" id="cityValue" name="Municipality_City">
                 <div class="searchable-select-menu" id="cityMenu"></div>
               </div>
@@ -182,13 +185,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="form-group">
               <label class="form-label" for="barangayInput">BARANGAY</label>
               <div class="searchable-select" id="barangayDropdown">
-                <input class="form-control searchable-select-input" type="text" id="barangayInput" autocomplete="off" required disabled>
+                <input class="form-control searchable-select-input" type="text" id="barangayInput" placeholder="Select barangay" autocomplete="off" required disabled>
                 <input type="hidden" id="barangayValue" name="Barangay">
                 <div class="searchable-select-menu" id="barangayMenu"></div>
               </div>
             </div>
 
-            <div class="form-group"><label class="form-label">ZIP CODE</label><input class="form-control" type="text" name="ZipCode" maxlength="4" required></div>
+            <div class="form-group"><label class="form-label">ZIP CODE</label><input class="form-control" type="text" name="ZipCode" maxlength="4" placeholder="9999" required></div>
             <div class="form-group"><label class="form-label">STREET</label><input class="form-control" type="text" name="Street" required></div>
             <div class="form-group"><label class="form-label">HOUSE NUMBER</label><input class="form-control" type="text" name="HouseNumber"></div>
           </div>
