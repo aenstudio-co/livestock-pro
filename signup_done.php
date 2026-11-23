@@ -12,7 +12,13 @@ $is_staff = ($mode === 'staff');
 </head>
 <body>
   <div class="auth-wrapper">
-    <a class="auth-back-btn" href="login.php" title="Back">&larr;</a>
+    <a class="auth-back-btn" href="login.php" title="Back" aria-label="Back">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <line x1="19" y1="12" x2="5" y2="12"></line>
+        <polyline points="12 19 5 12 12 5"></polyline>
+      </svg>
+    </a>
+    
     <div class="auth-card" style="text-align:center;">
       <div style="width:44px;height:44px;border-radius:50%;background:#0a5656;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:20px;margin-bottom:14px;">&#10003;</div>
       <h2 class="auth-card-title" style="margin-bottom:10px;">You're Already Signed Up!</h2>
