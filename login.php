@@ -23,18 +23,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if ($ok) {
-            $_SESSION['user_id']       = $user['user_id'];
-            $_SESSION['first_name']    = $user['first_name'];
-            $_SESSION['last_name']     = $user['last_name'];
-            $_SESSION['business_name'] = $user['business_name'];
-            $_SESSION['user_type']     = strtoupper(trim($user['user_type']));
+            $userType = strtoupper(trim((string)($user['user_type'] ?? '')));
+            $approvalStatus = trim((string)($user['approval_status'] ?? 'Approved'));
 
-            if ($_SESSION['user_type'] === 'O') {
-                header("Location: owner_dashboard.php");
+            if ($userType === 'S' && strcasecmp($approvalStatus, 'Approved') !== 0) {
+                $error = (strcasecmp($approvalStatus, 'Rejected') === 0)
+                    ? "Your staff account request was rejected by the farm owner."
+                    : "Your staff account is pending approval by the farm owner before you can log in.";
             } else {
-                header("Location: staff_dashboard.php");
+                $_SESSION['user_id']       = $user['user_id'];
+                $_SESSION['first_name']    = $user['first_name'];
+                $_SESSION['last_name']     = $user['last_name'];
+                $_SESSION['business_name'] = $user['business_name'];
+                $_SESSION['user_type']     = $userType;
+
+                if ($_SESSION['user_type'] === 'O') {
+                    header("Location: owner_dashboard.php");
+                } else {
+                    header("Location: staff_dashboard.php");
+                }
+                exit;
             }
-            exit;
         } else {
             $error = "Invalid username/email or password.";
         }
