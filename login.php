@@ -9,35 +9,88 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($login_id === '' || $password === '') {
         $error = "Please enter your email/username and password.";
     } else {
-        $stmt = $pdo->prepare("SELECT * FROM `user` WHERE `username` = :u OR `email` = :e LIMIT 1");
+        $stmt = $pdo->prepare("
+            SELECT
+                u.`user_id`,
+                u.`business_name`,
+                u.`first_name`,
+                u.`last_name`,
+                u.`email`,
+                u.`username`,
+                u.`password`,
+                u.`user_type`,
+                o.`user_id` AS `owner_record_id`,
+                s.`user_id` AS `staff_record_id`,
+                s.`date_hired`
+            FROM `user` u
+            LEFT JOIN `owner` o ON u.`user_id` = o.`user_id`
+            LEFT JOIN `staff` s ON u.`user_id` = s.`user_id`
+            WHERE u.`username` = :u OR u.`email` = :e
+            LIMIT 1
+        ");
         $stmt->execute(['u' => $login_id, 'e' => $login_id]);
-        $user = $stmt->fetch();
+        $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
         $ok = false;
         if ($user) {
-            $storedPassword = (string)$user['password'];
-            // Works when typing the original password OR pasting/typing the exact stored hash
-            if (password_verify($password, $storedPassword) || hash_equals($storedPassword, $password)) {
+            $storedPassword = (string)($user['password'] ?? '');
+            if (
+                (password_get_info($storedPassword)['algo'] !== null && password_verify($password, $storedPassword))
+                || hash_equals($storedPassword, $password)
+            ) {
                 $ok = true;
             }
         }
 
         if ($ok) {
             $userType = strtoupper(trim((string)($user['user_type'] ?? '')));
-            $approvalStatus = trim((string)($user['approval_status'] ?? 'Approved'));
 
-            if ($userType === 'S' && strcasecmp($approvalStatus, 'Approved') !== 0) {
-                $error = (strcasecmp($approvalStatus, 'Rejected') === 0)
-                    ? "Your staff account request was rejected by the farm owner."
-                    : "Your staff account is pending approval by the farm owner before you can log in.";
+            if ($userType === 'O') {
+                if (empty($user['owner_record_id'])) {
+                    $error = "Owner account setup is incomplete in the database.";
+                }
+            } elseif ($userType === 'S') {
+                $businessName = trim((string)($user['business_name'] ?? ''));
+                $ownerCheck = $pdo->prepare("
+                    SELECT o.`user_id`
+                    FROM `owner` o
+                    INNER JOIN `user` ou ON o.`user_id` = ou.`user_id`
+                    WHERE ou.`user_type` = 'O'
+                      AND LOWER(TRIM(ou.`business_name`)) = LOWER(TRIM(:bname))
+                    LIMIT 1
+                ");
+                $ownerCheck->execute(['bname' => $businessName]);
+                $hasBusinessOwner = (bool)$ownerCheck->fetchColumn();
+
+                $dateHiredRaw = trim((string)($user['date_hired'] ?? ''));
+                $isApproved = !empty($user['staff_record_id'])
+                    && $dateHiredRaw !== ''
+                    && $dateHiredRaw !== '1000-01-01'
+                    && $dateHiredRaw !== '1970-01-01'
+                    && $dateHiredRaw !== '0000-00-00'
+                    && !str_starts_with($dateHiredRaw, '0000-00-00');
+
+                if (!$isApproved) {
+                    $error = "Your staff account is pending approval by the owner of "
+                        . ($businessName !== '' ? $businessName : "this business")
+                        . " before you can log in.";
+                } elseif (!$hasBusinessOwner) {
+                    $error = "No registered business owner was found for "
+                        . ($businessName !== '' ? $businessName : "your business")
+                        . " to approve your account.";
+                }
             } else {
+                $error = "Invalid account role.";
+            }
+
+            if ($error === "") {
                 $_SESSION['user_id']       = $user['user_id'];
                 $_SESSION['first_name']    = $user['first_name'];
                 $_SESSION['last_name']     = $user['last_name'];
                 $_SESSION['business_name'] = $user['business_name'];
                 $_SESSION['user_type']     = $userType;
 
-                if ($_SESSION['user_type'] === 'O') {
+                if ($userType === 'O') {
                     header("Location: owner_dashboard.php");
                 } else {
                     header("Location: staff_dashboard.php");
