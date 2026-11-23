@@ -123,9 +123,21 @@ if ($full_name === '') {
     $full_name = $user_id;
 }
 
-$total_income    = (float)$pdo->query("SELECT COALESCE(SUM(amount), 0) FROM `sales`")->fetchColumn();
-$capital_amount  = (float)$pdo->query("SELECT COALESCE(SUM(cap_amount), 0) FROM `capital`")->fetchColumn();
-$completed_tasks = (int)$pdo->query("SELECT COUNT(*) FROM `task_schedule` WHERE `task_status` = 'Completed'")->fetchColumn();
+$total_income   = (float)$pdo->query("SELECT COALESCE(SUM(amount), 0) FROM `sales`")->fetchColumn();
+$capital_amount = (float)$pdo->query("SELECT COALESCE(SUM(cap_amount), 0) FROM `capital`")->fetchColumn();
+
+if ($role === 'O') {
+    $pending_tasks   = (int)$pdo->query("SELECT COUNT(*) FROM `task_schedule` WHERE `task_status` IN ('Pending', 'In Progress')")->fetchColumn();
+    $completed_tasks = (int)$pdo->query("SELECT COUNT(*) FROM `task_schedule` WHERE `task_status` = 'Completed'")->fetchColumn();
+} else {
+    $stmt_p = $pdo->prepare("SELECT COUNT(*) FROM `task_schedule` WHERE `user_id` = :uid AND `task_status` IN ('Pending', 'In Progress')");
+    $stmt_p->execute(['uid' => $user_id]);
+    $pending_tasks = (int)$stmt_p->fetchColumn();
+
+    $stmt_c = $pdo->prepare("SELECT COUNT(*) FROM `task_schedule` WHERE `user_id` = :uid AND `task_status` = 'Completed'");
+    $stmt_c->execute(['uid' => $user_id]);
+    $completed_tasks = (int)$stmt_c->fetchColumn();
+}
 
 $investment_history = $pdo->query("
     SELECT cap_id, cap_description, cap_amount, date_invested
@@ -233,6 +245,10 @@ $pending_staff_rows = $pending_staff_stmt->fetchAll();
               <div style="font-size:10px;color:var(--text-secondary);">TOTAL INCOME</div>
             </div>
           <?php else: ?>
+            <div>
+              <div style="font-size:22px;font-weight:700;"><?= $pending_tasks ?></div>
+              <div style="font-size:10px;color:var(--text-secondary);">PENDING TASKS</div>
+            </div>
             <div>
               <div style="font-size:22px;font-weight:700;"><?= $completed_tasks ?></div>
               <div style="font-size:10px;color:var(--text-secondary);">COMPLETED TASKS</div>
