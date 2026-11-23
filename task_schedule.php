@@ -11,7 +11,7 @@ $message   = "";
 $staff_rows = $pdo->query("
     SELECT u.user_id, u.first_name, u.last_name
     FROM `staff` s
-    JOIN `user` u ON s.user_id = u.user_id
+    JOIN `user` u ON s.user_id COLLATE utf8mb4_unicode_ci = u.user_id COLLATE utf8mb4_unicode_ci
     ORDER BY u.first_name ASC, u.last_name ASC
 ")->fetchAll();
 
