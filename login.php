@@ -14,10 +14,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $user = $stmt->fetch();
 
         $ok = false;
-        if ($user) {
-            if (password_verify($password, $user['password']) || hash_equals((string)$user['password'], $password)) {
-                $ok = true;
-            }
+        if ($user && (password_verify($password, $user['password']) || hash_equals((string)$user['password'], $password))) {
+            $ok = true;
         }
 
         if ($ok) {
@@ -47,9 +45,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <title>Login - LivestockPro</title>
   <link rel="stylesheet" href="css/style.css">
 </head>
-<body>
+<body class="login-bg">
   <div class="auth-wrapper">
-    <img src="assets/logo.png" alt="" aria-hidden="true" class="auth-watermark-bg">
     <div class="auth-brand">
       <h1>LivestockPro</h1>
       <p>Farm Management Tracker</p>
@@ -70,7 +67,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         <div class="form-group">
           <label class="form-label" for="password">PASSWORD</label>
-          <input class="form-control" type="password" id="password" name="password" placeholder="Enter password" required>
+          <div class="password-wrap">
+            <input class="form-control" type="password" id="password" name="password" placeholder="Enter password" required>
+            <button type="button" id="toggleBtn" class="toggle" onclick="togglePassword()" aria-label="Show password">&#128065;<span class="slash"></span></button>
+          </div>
         </div>
 
         <button class="btn btn-primary btn-block" type="submit">LOGIN</button>
@@ -81,5 +81,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       </p>
     </div>
   </div>
+
+  <script>
+    function togglePassword() {
+      const input = document.getElementById("password");
+      const btn = document.getElementById("toggleBtn");
+      const isHidden = input.type === "password";
+
+      if (isHidden) {
+        input.type = "text";
+        btn.classList.add("is-visible");
+        btn.setAttribute("aria-label", "Hide password");
+      } else {
+        input.type = "password";
+        btn.classList.remove("is-visible");
+        btn.setAttribute("aria-label", "Show password");
+      }
+    }
+  </script>
 </body>
 </html>
