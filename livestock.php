@@ -6,6 +6,7 @@ $full_name = trim(($_SESSION['first_name'] ?? 'Juan') . ' ' . ($_SESSION['last_n
 $user_id   = $_SESSION['user_id'];
 $role      = strtoupper($_SESSION['user_type'] ?? 'O');
 $message   = "";
+$error     = "";
 
 if (isset($_SESSION['flash_message'])) {
     $message = $_SESSION['flash_message'];
@@ -46,7 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_livestock'])) {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_livestock']) && $role === 'O') {
-    $edit_id     = trim($_POST['livestock_id'] ?? '');
+    $lid         = trim($_POST['livestock_id'] ?? '');
     $animal_type = trim($_POST['animal_type'] ?? '');
     $breed       = trim($_POST['breed'] ?? '');
     $quantity    = (int)($_POST['quantity'] ?? 0);
@@ -54,7 +55,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_livestock']) && 
     $health      = trim($_POST['health_status'] ?? 'Healthy');
     $vacc_status = trim($_POST['vaccination_status'] ?? 'Vaccinated');
 
-    if ($edit_id !== '' && $animal_type !== '' && $quantity > 0) {
+    if ($lid !== '' && $animal_type !== '' && $quantity > 0) {
         $stmt = $pdo->prepare("
             UPDATE `livestock`
             SET `animal_type` = :atype,
@@ -72,11 +73,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_livestock']) && 
             'wt'    => $weight,
             'hs'    => $health,
             'vs'    => $vacc_status,
-            'lid'   => $edit_id
+            'lid'   => $lid
         ]);
-        $_SESSION['flash_message'] = "Updated {$edit_id}.";
+        $_SESSION['flash_message'] = "Updated {$lid}.";
         header("Location: livestock.php");
         exit;
+    } else {
+        $error = "Animal type and a quantity of at least 1 are required.";
     }
 }
 
@@ -100,6 +103,32 @@ $records = $pdo->query("SELECT * FROM `livestock` ORDER BY `livestock_id` DESC")
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Livestock - LivestockPro</title>
   <link rel="stylesheet" href="css/style.css">
+  <style>
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      background: rgba(0, 0, 0, 0.45);
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal-box {
+      background: var(--bg-card);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      width: 100%;
+      max-width: 560px;
+      box-shadow: var(--shadow-modal);
+    }
+    .modal-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 12px;
+    }
+  </style>
 </head>
 <body>
   <div class="app-shell">
@@ -142,6 +171,9 @@ $records = $pdo->query("SELECT * FROM `livestock` ORDER BY `livestock_id` DESC")
       <?php if ($message !== ""): ?>
         <div class="alert alert-success"><?= htmlspecialchars($message) ?></div>
       <?php endif; ?>
+      <?php if ($error !== ""): ?>
+        <div class="alert alert-error"><?= htmlspecialchars($error) ?></div>
+      <?php endif; ?>
 
       <div class="card">
         <div class="card-title">Add Livestock</div>
@@ -181,6 +213,8 @@ $records = $pdo->query("SELECT * FROM `livestock` ORDER BY `livestock_id` DESC")
                 <option value="Healthy">Healthy</option>
                 <option value="Sick">Sick</option>
                 <option value="Recovered">Recovered</option>
+                <option value="Quarantined">Quarantined</option>
+                <option value="Deceased">Deceased</option>
               </select>
             </div>
             <div class="form-group">
@@ -221,19 +255,15 @@ $records = $pdo->query("SELECT * FROM `livestock` ORDER BY `livestock_id` DESC")
                 <td><?= strtoupper(htmlspecialchars($row['vaccination_status'] ?? 'N/A')) ?></td>
                 <?php if ($role === 'O'): ?>
                   <td>
-                    <button
-                      type="button"
-                      class="btn btn-sm btn-edit"
-                      onclick='openEditModal(<?= json_encode([
-                        "livestock_id"       => $row["livestock_id"],
-                        "animal_type"        => $row["animal_type"],
-                        "breed"              => $row["breed"],
-                        "quantity"           => (int)$row["quantity"],
-                        "weight"             => (float)$row["weight"],
-                        "health_status"      => $row["health_status"],
-                        "vaccination_status" => $row["vaccination_status"] ?? "Vaccinated"
-                      ], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>)'
-                    >EDIT</button>
+                    <button type="button" class="btn btn-sm btn-edit"
+                      data-id="<?= htmlspecialchars($row['livestock_id']) ?>"
+                      data-type="<?= htmlspecialchars($row['animal_type']) ?>"
+                      data-breed="<?= htmlspecialchars($row['breed']) ?>"
+                      data-qty="<?= htmlspecialchars((string)$row['quantity']) ?>"
+                      data-weight="<?= htmlspecialchars((string)$row['weight']) ?>"
+                      data-health="<?= htmlspecialchars($row['health_status']) ?>"
+                      data-vacc="<?= htmlspecialchars($row['vaccination_status'] ?? 'Vaccinated') ?>"
+                      onclick="openEditLivestockModal(this)">EDIT</button>
                     <a class="btn btn-sm btn-delete" href="livestock.php?delete=<?= urlencode($row['livestock_id']) ?>" onclick="return confirm('Delete record?')" title="Delete"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg></a>
                   </td>
                 <?php endif; ?>
@@ -246,81 +276,82 @@ $records = $pdo->query("SELECT * FROM `livestock` ORDER BY `livestock_id` DESC")
   </div>
 
   <?php if ($role === 'O'): ?>
-    <div class="modal-backdrop" id="editLivestockModal" onclick="if (event.target === this) closeEditModal()">
-      <div class="modal-box">
-        <div class="modal-header">
-          <div class="card-title" style="margin-bottom:0;">Edit Livestock (<span id="editModalIdLabel"></span>)</div>
-          <button type="button" class="modal-close" onclick="closeEditModal()" aria-label="Close">&times;</button>
+  <div class="modal-backdrop" id="editLivestockModal">
+    <div class="modal-box">
+      <div class="card-title">Edit Livestock</div>
+      <form method="POST" action="livestock.php">
+        <input type="hidden" name="livestock_id" id="edit_livestock_id">
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label class="form-label">ANIMAL TYPE</label>
+            <select class="form-control" name="animal_type" id="edit_animal_type" required>
+              <option value="Carabao">Carabao</option>
+              <option value="Cattle">Cattle</option>
+              <option value="Swine">Swine</option>
+              <option value="Goat">Goat</option>
+              <option value="Chicken">Chicken</option>
+              <option value="Duck">Duck</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">BREED</label>
+            <input class="form-control" type="text" name="breed" id="edit_breed" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">QUANTITY</label>
+            <input class="form-control" type="number" name="quantity" id="edit_quantity" min="1" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">WEIGHT (KG)</label>
+            <input class="form-control" type="number" step="0.01" name="weight" id="edit_weight" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">HEALTH STATUS</label>
+            <select class="form-control" name="health_status" id="edit_health_status">
+              <option value="Healthy">Healthy</option>
+              <option value="Sick">Sick</option>
+              <option value="Recovered">Recovered</option>
+              <option value="Quarantined">Quarantined</option>
+              <option value="Deceased">Deceased</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">VACCINATION STATUS</label>
+            <select class="form-control" name="vaccination_status" id="edit_vaccination_status">
+              <option value="Vaccinated">Vaccinated</option>
+              <option value="Unvaccinated">Unvaccinated</option>
+              <option value="Partial">Partial</option>
+            </select>
+          </div>
         </div>
-        <form method="POST" action="livestock.php">
-          <input type="hidden" name="livestock_id" id="editLivestockId">
-          <div class="form-grid-2">
-            <div class="form-group">
-              <label class="form-label">SELECT ANIMAL</label>
-              <select class="form-control" name="animal_type" id="editAnimalType" required>
-                <option value="">Select Animal</option>
-                <option value="Carabao">Carabao</option>
-                <option value="Cattle">Cattle</option>
-                <option value="Swine">Swine</option>
-                <option value="Goat">Goat</option>
-                <option value="Chicken">Chicken</option>
-                <option value="Duck">Duck</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label class="form-label">BREED</label>
-              <input class="form-control" type="text" name="breed" id="editBreed" required>
-            </div>
-            <div class="form-group">
-              <label class="form-label">QUANTITY</label>
-              <input class="form-control" type="number" name="quantity" id="editQuantity" min="1" required>
-            </div>
-            <div class="form-group">
-              <label class="form-label">WEIGHT (KG)</label>
-              <input class="form-control" type="number" step="0.01" name="weight" id="editWeight" required>
-            </div>
-            <div class="form-group">
-              <label class="form-label">HEALTH STATUS</label>
-              <select class="form-control" name="health_status" id="editHealthStatus">
-                <option value="Healthy">Healthy</option>
-                <option value="Sick">Sick</option>
-                <option value="Recovered">Recovered</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label class="form-label">VACCINATION STATUS</label>
-              <select class="form-control" name="vaccination_status" id="editVaccStatus">
-                <option value="Vaccinated">Vaccinated</option>
-                <option value="Unvaccinated">Unvaccinated</option>
-                <option value="Partial">Partial</option>
-              </select>
-            </div>
-          </div>
-          <div class="modal-actions">
-            <button type="button" class="btn" onclick="closeEditModal()">CANCEL</button>
-            <button type="submit" class="btn btn-primary" name="edit_livestock">SAVE CHANGES</button>
-          </div>
-        </form>
-      </div>
+        <div class="modal-actions">
+          <button class="btn btn-primary" type="submit" name="edit_livestock">SAVE CHANGES</button>
+          <button class="btn" type="button" onclick="closeEditLivestockModal()">CANCEL</button>
+        </div>
+      </form>
     </div>
+  </div>
 
-    <script>
-      function openEditModal(row) {
-        document.getElementById('editLivestockId').value = row.livestock_id;
-        document.getElementById('editModalIdLabel').textContent = row.livestock_id;
-        document.getElementById('editAnimalType').value = row.animal_type;
-        document.getElementById('editBreed').value = row.breed;
-        document.getElementById('editQuantity').value = row.quantity;
-        document.getElementById('editWeight').value = row.weight;
-        document.getElementById('editHealthStatus').value = row.health_status;
-        document.getElementById('editVaccStatus').value = row.vaccination_status;
-        document.getElementById('editLivestockModal').classList.add('is-open');
-      }
+  <script>
+    function openEditLivestockModal(btn) {
+      document.getElementById('edit_livestock_id').value       = btn.dataset.id;
+      document.getElementById('edit_animal_type').value       = btn.dataset.type;
+      document.getElementById('edit_breed').value             = btn.dataset.breed;
+      document.getElementById('edit_quantity').value          = btn.dataset.qty;
+      document.getElementById('edit_weight').value            = btn.dataset.weight;
+      document.getElementById('edit_health_status').value     = btn.dataset.health;
+      document.getElementById('edit_vaccination_status').value = btn.dataset.vacc;
+      document.getElementById('editLivestockModal').classList.add('open');
+    }
 
-      function closeEditModal() {
-        document.getElementById('editLivestockModal').classList.remove('is-open');
-      }
-    </script>
+    function closeEditLivestockModal() {
+      document.getElementById('editLivestockModal').classList.remove('open');
+    }
+
+    document.getElementById('editLivestockModal').addEventListener('click', function (e) {
+      if (e.target === this) closeEditLivestockModal();
+    });
+  </script>
   <?php endif; ?>
 </body>
 </html>

@@ -14,21 +14,56 @@ if (isset($_SESSION['flash_message'])) {
     unset($_SESSION['flash_message']);
 }
 
+$stmt_u = $pdo->prepare("
+    SELECT u.*, a.Province, a.Municipality_City, a.Barangay, a.ZipCode
+    FROM `user` u
+    LEFT JOIN `address` a ON u.address_id = a.address_id
+    WHERE u.`user_id` = :uid
+    LIMIT 1
+");
+$stmt_u->execute(['uid' => $user_id]);
+$u_row = $stmt_u->fetch() ?: [];
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_profile'])) {
-    $fn = trim($_POST['first_name'] ?? '');
-    $ln = trim($_POST['last_name'] ?? '');
-    $cn = trim($_POST['contact_number'] ?? '');
-    $em = trim($_POST['email'] ?? '');
+    $fn  = trim($_POST['first_name'] ?? '');
+    $ln  = trim($_POST['last_name'] ?? '');
+    $cn  = trim($_POST['contact_number'] ?? '');
+    $em  = trim($_POST['email'] ?? '');
+    $prv = trim($_POST['province'] ?? '');
+    $cty = trim($_POST['municipality_city'] ?? '');
+    $brg = trim($_POST['barangay'] ?? '');
+    $zip = trim($_POST['zip_code'] ?? '');
 
     if ($fn === '' || $ln === '') {
         $error = "First name and last name are required.";
     } else {
-        $pdo->prepare("UPDATE `user` SET `first_name` = :fn, `last_name` = :ln, `contact_number` = :cn, `email` = :em WHERE `user_id` = :uid")
-            ->execute(['fn' => $fn, 'ln' => $ln, 'cn' => $cn, 'em' => $em, 'uid' => $user_id]);
+        $pdo->prepare("
+            UPDATE `user`
+            SET `first_name` = :fn, `last_name` = :ln, `contact_number` = :cn, `email` = :em
+            WHERE `user_id` = :uid
+        ")->execute(['fn' => $fn, 'ln' => $ln, 'cn' => $cn, 'em' => $em, 'uid' => $user_id]);
+
+        $addr_id = trim((string)($u_row['address_id'] ?? ''));
+        if ($addr_id !== '') {
+            $pdo->prepare("
+                UPDATE `address`
+                SET `Province` = :prv, `Municipality_City` = :cty, `Barangay` = :brg, `ZipCode` = :zip
+                WHERE `address_id` = :aid
+            ")->execute([
+                'prv' => $prv,
+                'cty' => $cty,
+                'brg' => $brg,
+                'zip' => $zip,
+                'aid' => $addr_id
+            ]);
+        }
 
         $_SESSION['first_name'] = $fn;
         $_SESSION['last_name']  = $ln;
         $message = "Profile information updated.";
+
+        $stmt_u->execute(['uid' => $user_id]);
+        $u_row = $stmt_u->fetch() ?: $u_row;
     }
 }
 
@@ -49,6 +84,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['manage_account'])) {
                 ->execute(['un' => $uname, 'uid' => $user_id]);
             $message = "Account username updated.";
         }
+        $stmt_u->execute(['uid' => $user_id]);
+        $u_row = $stmt_u->fetch() ?: $u_row;
     }
 }
 
@@ -68,7 +105,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_capital']) && $ro
     } elseif (!$date_ok || $date_ok->format('Y-m-d') !== $cap_date) {
         $error = "Please enter a valid date.";
     } else {
-        // Generate next ID in the same format: CAP-00001, CAP-00002, ...
         $max_num = (int)$pdo->query("SELECT COALESCE(MAX(CAST(SUBSTRING(cap_id, 5) AS UNSIGNED)), 0) FROM `capital`")->fetchColumn();
         $new_cap_id = 'CAP-' . str_pad((string)($max_num + 1), 5, '0', STR_PAD_LEFT);
 
@@ -86,7 +122,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_capital']) && $ro
     }
 }
 
-// Approve pending staff under the owner's business name (owner only)
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['approve_staff_uid']) && $role === 'O') {
     $target_uid = trim($_POST['approve_staff_uid'] ?? '');
     if ($target_uid !== '') {
@@ -114,10 +150,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['approve_staff_uid']) 
     }
 }
 
-$stmt_u = $pdo->prepare("SELECT * FROM `user` WHERE `user_id` = :uid LIMIT 1");
+$stmt_u = $pdo->prepare("
+    SELECT u.*, a.Province, a.Municipality_City, a.Barangay, a.ZipCode
+    FROM `user` u
+    LEFT JOIN `address` a ON u.address_id = a.address_id
+    WHERE u.`user_id` = :uid
+    LIMIT 1
+");
 $stmt_u->execute(['uid' => $user_id]);
 $u_row = $stmt_u->fetch() ?: [];
-
 $full_name = trim(($u_row['first_name'] ?? $_SESSION['first_name'] ?? '') . ' ' . ($u_row['last_name'] ?? $_SESSION['last_name'] ?? ''));
 if ($full_name === '') {
     $full_name = $user_id;
@@ -127,16 +168,33 @@ $total_income   = (float)$pdo->query("SELECT COALESCE(SUM(amount), 0) FROM `sale
 $capital_amount = (float)$pdo->query("SELECT COALESCE(SUM(cap_amount), 0) FROM `capital`")->fetchColumn();
 
 if ($role === 'O') {
-    $pending_tasks   = (int)$pdo->query("SELECT COUNT(*) FROM `task_schedule` WHERE `task_status` IN ('Pending', 'In Progress')")->fetchColumn();
-    $completed_tasks = (int)$pdo->query("SELECT COUNT(*) FROM `task_schedule` WHERE `task_status` = 'Completed'")->fetchColumn();
+    $pending_tasks      = (int)$pdo->query("SELECT COUNT(*) FROM `task_schedule` WHERE `task_status` = 'Pending'")->fetchColumn();
+    $in_progress_tasks  = (int)$pdo->query("SELECT COUNT(*) FROM `task_schedule` WHERE `task_status` = 'In Progress'")->fetchColumn();
+    $completed_tasks    = (int)$pdo->query("SELECT COUNT(*) FROM `task_schedule` WHERE `task_status` = 'Completed'")->fetchColumn();
+    $staff_task_history = [];
 } else {
-    $stmt_p = $pdo->prepare("SELECT COUNT(*) FROM `task_schedule` WHERE `user_id` = :uid AND `task_status` IN ('Pending', 'In Progress')");
+    $stmt_p = $pdo->prepare("SELECT COUNT(*) FROM `task_schedule` WHERE `user_id` = :uid AND `task_status` = 'Pending'");
     $stmt_p->execute(['uid' => $user_id]);
     $pending_tasks = (int)$stmt_p->fetchColumn();
+
+    $stmt_ip = $pdo->prepare("SELECT COUNT(*) FROM `task_schedule` WHERE `user_id` = :uid AND `task_status` = 'In Progress'");
+    $stmt_ip->execute(['uid' => $user_id]);
+    $in_progress_tasks = (int)$stmt_ip->fetchColumn();
 
     $stmt_c = $pdo->prepare("SELECT COUNT(*) FROM `task_schedule` WHERE `user_id` = :uid AND `task_status` = 'Completed'");
     $stmt_c->execute(['uid' => $user_id]);
     $completed_tasks = (int)$stmt_c->fetchColumn();
+
+    // Only tasks belonging to the logged-in staff member ($user_id)
+    $stmt_th = $pdo->prepare("
+        SELECT task_id, task_name, task_description, schedule_date
+        FROM `task_schedule`
+        WHERE `user_id` = :uid
+        ORDER BY schedule_date DESC, task_id DESC
+        LIMIT 8
+    ");
+    $stmt_th->execute(['uid' => $user_id]);
+    $staff_task_history = $stmt_th->fetchAll();
 }
 
 $investment_history = $pdo->query("
@@ -178,6 +236,34 @@ $pending_staff_rows = $pending_staff_stmt->fetchAll();
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>My Profile - LivestockPro</title>
   <link rel="stylesheet" href="css/style.css">
+  <style>
+    .staff-hero-stats {
+      display: flex;
+      align-items: center;
+      gap: 32px;
+    }
+    .staff-hero-stat {
+      padding-left: 24px;
+      border-left: 1px solid var(--border-subtle);
+      text-align: center;
+    }
+    .form-divider {
+      border: none;
+      border-top: 1px solid var(--border-subtle);
+      margin: 16px 0 18px;
+    }
+    @media (max-width: 960px) {
+      .staff-hero-stats {
+        flex-wrap: wrap;
+        gap: 18px;
+      }
+      .staff-hero-stat {
+        padding-left: 0;
+        border-left: none;
+        text-align: left;
+      }
+    }
+  </style>
 </head>
 <body>
   <div class="app-shell">
@@ -225,17 +311,16 @@ $pending_staff_rows = $pending_staff_stmt->fetchAll();
       <?php endif; ?>
 
       <div class="profile-hero">
-        <div style="display:flex;align-items:center;gap:14px;">
-          <div class="sidebar-avatar" style="width:52px;height:52px;font-size:18px;"><?= strtoupper(substr($full_name, 0, 2)) ?></div>
-          <div>
-            <div style="font-size:18px;font-weight:700;"><?= htmlspecialchars($full_name) ?></div>
-            <div style="font-size:12px;color:var(--text-secondary);"><?= $role === 'O' ? 'Owner of ' : 'Staff of ' ?><?= htmlspecialchars($business) ?></div>
-            <div style="font-size:10px;color:var(--text-muted);">Member since <?= htmlspecialchars($u_row['birthdate'] ?? '2021-01-01') ?></div>
+        <?php if ($role === 'O'): ?>
+          <div style="display:flex;align-items:center;gap:14px;">
+            <div class="sidebar-avatar" style="width:52px;height:52px;font-size:18px;"><?= strtoupper(substr($full_name, 0, 2)) ?></div>
+            <div>
+              <div style="font-size:18px;font-weight:700;"><?= htmlspecialchars($full_name) ?></div>
+              <div style="font-size:12px;color:var(--text-secondary);">Owner of <?= htmlspecialchars($business) ?></div>
+            </div>
           </div>
-        </div>
 
-        <div style="display:flex;gap:32px;align-items:center;">
-          <?php if ($role === 'O'): ?>
+          <div style="display:flex;gap:32px;align-items:center;">
             <div>
               <div style="font-size:22px;font-weight:700;">&#8369;<?= number_format($capital_amount, 0) ?></div>
               <div style="font-size:10px;color:var(--text-secondary);">CAPITAL</div>
@@ -244,17 +329,28 @@ $pending_staff_rows = $pending_staff_stmt->fetchAll();
               <div style="font-size:22px;font-weight:700;">&#8369;<?= number_format($total_income, 0) ?></div>
               <div style="font-size:10px;color:var(--text-secondary);">TOTAL INCOME</div>
             </div>
-          <?php else: ?>
-            <div>
-              <div style="font-size:22px;font-weight:700;"><?= $pending_tasks ?></div>
-              <div style="font-size:10px;color:var(--text-secondary);">PENDING TASKS</div>
+          </div>
+        <?php else: ?>
+          <div>
+            <div style="font-size:26px;font-weight:700;line-height:1.15;"><?= htmlspecialchars($full_name) ?></div>
+            <div style="font-size:12px;font-weight:600;color:var(--text-primary);margin-top:4px;">Staff of <?= htmlspecialchars($business) ?></div>
+          </div>
+
+          <div class="staff-hero-stats">
+            <div class="staff-hero-stat">
+              <div style="font-size:26px;font-weight:700;line-height:1.15;"><?= $completed_tasks ?></div>
+              <div style="font-size:10px;font-weight:600;color:var(--text-secondary);margin-top:4px;">TOTAL TASKS COMPLETED</div>
             </div>
-            <div>
-              <div style="font-size:22px;font-weight:700;"><?= $completed_tasks ?></div>
-              <div style="font-size:10px;color:var(--text-secondary);">COMPLETED TASKS</div>
+            <div class="staff-hero-stat">
+              <div style="font-size:26px;font-weight:700;line-height:1.15;"><?= $in_progress_tasks ?></div>
+              <div style="font-size:10px;font-weight:600;color:var(--text-secondary);margin-top:4px;">IN PROGRESS TASKS</div>
             </div>
-          <?php endif; ?>
-        </div>
+            <div class="staff-hero-stat">
+              <div style="font-size:26px;font-weight:700;line-height:1.15;"><?= $pending_tasks ?></div>
+              <div style="font-size:10px;font-weight:600;color:var(--text-secondary);margin-top:4px;">PENDING TASKS</div>
+            </div>
+          </div>
+        <?php endif; ?>
       </div>
 
       <div class="split-grid">
@@ -269,7 +365,7 @@ $pending_staff_rows = $pending_staff_stmt->fetchAll();
                 </div>
                 <div class="form-group">
                   <label class="form-label">CONTACT NUMBER</label>
-                  <input class="form-control" type="text" name="contact_number" value="<?= htmlspecialchars($u_row['contact_number'] ?? '') ?>">
+                  <input class="form-control" type="text" name="contact_number" placeholder="09XX-XXX-XXXX" value="<?= htmlspecialchars($u_row['contact_number'] ?? '') ?>">
                 </div>
                 <div class="form-group">
                   <label class="form-label">FIRST NAME</label>
@@ -280,10 +376,33 @@ $pending_staff_rows = $pending_staff_stmt->fetchAll();
                   <input class="form-control" type="text" name="last_name" value="<?= htmlspecialchars($u_row['last_name'] ?? '') ?>">
                 </div>
               </div>
+
               <div class="form-group">
                 <label class="form-label">EMAIL</label>
                 <input class="form-control" type="email" name="email" value="<?= htmlspecialchars($u_row['email'] ?? '') ?>">
               </div>
+
+              <hr class="form-divider">
+
+              <div class="form-grid-2">
+                <div class="form-group">
+                  <label class="form-label">PROVINCE</label>
+                  <input class="form-control" type="text" name="province" placeholder="Enter province" value="<?= htmlspecialchars($u_row['Province'] ?? '') ?>">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">MUNICIPALITY/CITY</label>
+                  <input class="form-control" type="text" name="municipality_city" placeholder="Enter municipality or city" value="<?= htmlspecialchars($u_row['Municipality_City'] ?? '') ?>">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">BARANGAY</label>
+                  <input class="form-control" type="text" name="barangay" placeholder="Enter barangay" value="<?= htmlspecialchars($u_row['Barangay'] ?? '') ?>">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">ZIP CODE</label>
+                  <input class="form-control" type="text" name="zip_code" maxlength="4" placeholder="Enter zip code" value="<?= htmlspecialchars($u_row['ZipCode'] ?? '') ?>">
+                </div>
+              </div>
+
               <button class="btn btn-primary" type="submit" name="save_profile">SAVE CHANGES</button>
             </form>
           </div>
@@ -348,8 +467,7 @@ $pending_staff_rows = $pending_staff_stmt->fetchAll();
                 </tbody>
               </table>
             </div>
-
-            <div class="card staff-approval-card">
+<div class="card staff-approval-card">
               <div class="card-title">Pending Staff Approvals</div>
               <?php if (empty($pending_staff_rows)): ?>
                 <div class="staff-approval-empty">No pending staff requests for <?= htmlspecialchars($business) ?>.</div>
@@ -376,7 +494,35 @@ $pending_staff_rows = $pending_staff_stmt->fetchAll();
                 </table>
               <?php endif; ?>
             </div>
+          <?php else: ?>
+            <div class="card">
+              <div class="card-title">Task History</div>
+              <table class="data-table">
+                <thead>
+                  <tr><th>ID</th><th>DESCRIPTION</th><th>DATE</th></tr>
+                </thead>
+                <tbody>
+                  <?php if (empty($staff_task_history)): ?>
+                    <tr><td colspan="3" style="text-align:center;color:var(--text-muted);">No tasks assigned to you yet.</td></tr>
+                  <?php endif; ?>
+                  <?php foreach ($staff_task_history as $th): ?>
+                    <?php
+                      $desc_txt = trim((string)($th['task_description'] ?? ''));
+                      if ($desc_txt === '') {
+                          $desc_txt = (string)($th['task_name'] ?? '');
+                      }
+                    ?>
+                    <tr>
+                      <td><?= htmlspecialchars($th['task_id']) ?></td>
+                      <td><?= strtoupper(htmlspecialchars($desc_txt)) ?></td>
+                      <td style="white-space:nowrap;"><?= htmlspecialchars(date('n/j/Y', strtotime($th['schedule_date']))) ?></td>
+                    </tr>
+                  <?php endforeach; ?>
+                </tbody>
+              </table>
+            </div>
           <?php endif; ?>
+            </div>
 
           <div class="card">
             <div class="card-title">Staff List</div>

@@ -7,6 +7,12 @@ if ($full_name === '') { $full_name = 'User'; }
 $user_id   = $_SESSION['user_id'];
 $role      = strtoupper($_SESSION['user_type'] ?? 'O');
 $message   = "";
+$error     = "";
+
+if (isset($_SESSION['flash_message'])) {
+    $message = $_SESSION['flash_message'];
+    unset($_SESSION['flash_message']);
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_expense']) && $role === 'O') {
     $name   = trim($_POST['category'] ?? '');
@@ -14,8 +20,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_expense']) && $ro
     $notes  = trim($_POST['expense_description'] ?? '');
 
     if ($name !== '' && $amount > 0) {
-        $count  = (int)$pdo->query("SELECT COUNT(*) FROM `expenses`")->fetchColumn() + 1;
-        $new_id = sprintf("EXP-%05d", $count);
+        $max_num = (int)$pdo->query("SELECT COALESCE(MAX(CAST(SUBSTRING(`expense_id`, 5) AS UNSIGNED)), 0) FROM `expenses`")->fetchColumn();
+        $new_id  = sprintf("EXP-%05d", $max_num + 1);
         $pdo->prepare("
             INSERT INTO `expenses` (`expense_id`, `user_id`, `amount`, `category`, `expense_description`, `date_recorded`)
             VALUES (:eid, :uid, :amt, :cat, :desc, NOW())
@@ -24,9 +30,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_expense']) && $ro
             'uid'  => $user_id,
             'amt'  => $amount,
             'cat'  => $name,
-            'desc' => $notes ?: null
+            'desc' => $notes !== '' ? $notes : null
         ]);
-        $message = "Expense {$new_id} recorded.";
+        $_SESSION['flash_message'] = "Expense {$new_id} recorded.";
+        header("Location: expenses.php");
+        exit;
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_expense']) && $role === 'O') {
+    $eid    = trim($_POST['expense_id'] ?? '');
+    $name   = trim($_POST['category'] ?? '');
+    $amount = (float)($_POST['amount'] ?? 0);
+    $notes  = trim($_POST['expense_description'] ?? '');
+
+    if ($eid !== '' && $name !== '' && $amount > 0) {
+        $pdo->prepare("
+            UPDATE `expenses`
+            SET `category` = :cat,
+                `amount` = :amt,
+                `expense_description` = :desc
+            WHERE `expense_id` = :eid
+        ")->execute([
+            'cat'  => $name,
+            'amt'  => $amount,
+            'desc' => $notes !== '' ? $notes : null,
+            'eid'  => $eid
+        ]);
+        $_SESSION['flash_message'] = "Updated {$eid}.";
+        header("Location: expenses.php");
+        exit;
+    } else {
+        $error = "Expense name and an amount greater than zero are required.";
     }
 }
 
@@ -59,6 +94,32 @@ foreach ($by_exp_cat as $c) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Expenses - LivestockPro</title>
   <link rel="stylesheet" href="css/style.css?v=<?= filemtime(__DIR__ . '/css/style.css') ?>">
+  <style>
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      background: rgba(0, 0, 0, 0.45);
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal-box {
+      background: var(--bg-card);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      width: 100%;
+      max-width: 520px;
+      box-shadow: var(--shadow-modal);
+    }
+    .modal-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 12px;
+    }
+  </style>
 </head>
 <body>
   <div class="app-shell">
@@ -100,6 +161,9 @@ foreach ($by_exp_cat as $c) {
 
       <?php if ($message !== ""): ?>
         <div class="alert alert-success"><?= htmlspecialchars($message) ?></div>
+      <?php endif; ?>
+      <?php if ($error !== ""): ?>
+        <div class="alert alert-error"><?= htmlspecialchars($error) ?></div>
       <?php endif; ?>
 
       <?php if ($role === 'O'): ?>
@@ -175,7 +239,12 @@ foreach ($by_exp_cat as $c) {
                 <td><?= htmlspecialchars($r['expense_description'] ?? '-') ?></td>
                 <?php if ($role === 'O'): ?>
                   <td>
-                    <a class="btn btn-sm btn-edit" href="expenses.php?edit=<?= urlencode($r['expense_id']) ?>">EDIT</a>
+                    <button type="button" class="btn btn-sm btn-edit"
+                      data-id="<?= htmlspecialchars($r['expense_id']) ?>"
+                      data-category="<?= htmlspecialchars($r['category']) ?>"
+                      data-amount="<?= htmlspecialchars((string)$r['amount']) ?>"
+                      data-desc="<?= htmlspecialchars($r['expense_description'] ?? '') ?>"
+                      onclick="openEditExpenseModal(this)">EDIT</button>
                     <a class="btn btn-sm btn-delete" href="expenses.php?delete=<?= urlencode($r['expense_id']) ?>" onclick="return confirm('Delete expense?')" title="Delete"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg></a>
                   </td>
                 <?php endif; ?>
@@ -186,5 +255,52 @@ foreach ($by_exp_cat as $c) {
       </div>
     </main>
   </div>
+
+  <?php if ($role === 'O'): ?>
+  <div class="modal-backdrop" id="editExpenseModal">
+    <div class="modal-box">
+      <div class="card-title">Edit Expense</div>
+      <form method="POST" action="expenses.php">
+        <input type="hidden" name="expense_id" id="edit_expense_id">
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label class="form-label">EXPENSE NAME</label>
+            <input class="form-control" type="text" name="category" id="edit_expense_category" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">AMOUNT</label>
+            <input class="form-control" type="number" step="0.01" min="0.01" name="amount" id="edit_expense_amount" required>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">NOTES</label>
+          <textarea class="form-control" name="expense_description" id="edit_expense_description"></textarea>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-primary" type="submit" name="edit_expense">SAVE CHANGES</button>
+          <button class="btn" type="button" onclick="closeEditExpenseModal()">CANCEL</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    function openEditExpenseModal(btn) {
+      document.getElementById('edit_expense_id').value          = btn.dataset.id;
+      document.getElementById('edit_expense_category').value    = btn.dataset.category;
+      document.getElementById('edit_expense_amount').value      = btn.dataset.amount;
+      document.getElementById('edit_expense_description').value = btn.dataset.desc;
+      document.getElementById('editExpenseModal').classList.add('open');
+    }
+
+    function closeEditExpenseModal() {
+      document.getElementById('editExpenseModal').classList.remove('open');
+    }
+
+    document.getElementById('editExpenseModal').addEventListener('click', function (e) {
+      if (e.target === this) closeEditExpenseModal();
+    });
+  </script>
+  <?php endif; ?>
 </body>
 </html>

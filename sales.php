@@ -7,27 +7,70 @@ if ($full_name === '') { $full_name = 'User'; }
 $user_id   = $_SESSION['user_id'];
 $role      = strtoupper($_SESSION['user_type'] ?? 'O');
 $message   = "";
+$error     = "";
+
+if (isset($_SESSION['flash_message'])) {
+    $message = $_SESSION['flash_message'];
+    unset($_SESSION['flash_message']);
+}
 
 $livestock_list = $pdo->query("SELECT livestock_id, animal_type, breed FROM `livestock` ORDER BY livestock_id ASC")->fetchAll();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_sale']) && $role === 'O') {
-    $lid    = trim($_POST['livestock_id'] ?? '');
-    $qty    = (int)($_POST['quantity_sold'] ?? 0);
-    $amount = (float)($_POST['amount'] ?? 0);
+    $lid       = trim($_POST['livestock_id'] ?? '');
+    $qty       = (int)($_POST['quantity_sold'] ?? 0);
+    $amount    = (float)($_POST['amount'] ?? 0);
+    $date_sold = trim($_POST['date_sold'] ?? '');
+    $date_ok   = DateTime::createFromFormat('Y-m-d', $date_sold);
+    $final_dt  = ($date_ok && $date_ok->format('Y-m-d') === $date_sold) ? $date_sold : date('Y-m-d');
 
     if ($lid !== '' && $qty > 0 && $amount > 0) {
-        $count  = (int)$pdo->query("SELECT COUNT(*) FROM `sales`")->fetchColumn() + 1;
-        $new_id = sprintf("SLS-%05d", $count);
+        $max_num = (int)$pdo->query("SELECT COALESCE(MAX(CAST(SUBSTRING(`sales_id`, 5) AS UNSIGNED)), 0) FROM `sales`")->fetchColumn();
+        $new_id  = sprintf("SLS-%05d", $max_num + 1);
         $pdo->prepare("
             INSERT INTO `sales` (`sales_id`, `livestock_id`, `amount`, `quantity_sold`, `date_sold`)
-            VALUES (:sid, :lid, :amt, :qty, CURDATE())
+            VALUES (:sid, :lid, :amt, :qty, :dt)
         ")->execute([
             'sid' => $new_id,
             'lid' => $lid,
             'amt' => $amount,
-            'qty' => $qty
+            'qty' => $qty,
+            'dt'  => $final_dt
         ]);
-        $message = "Sale {$new_id} recorded.";
+        $_SESSION['flash_message'] = "Sale {$new_id} recorded.";
+        header("Location: sales.php");
+        exit;
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_sale']) && $role === 'O') {
+    $sid       = trim($_POST['sales_id'] ?? '');
+    $lid       = trim($_POST['livestock_id'] ?? '');
+    $qty       = (int)($_POST['quantity_sold'] ?? 0);
+    $amount    = (float)($_POST['amount'] ?? 0);
+    $date_sold = trim($_POST['date_sold'] ?? '');
+    $date_ok   = DateTime::createFromFormat('Y-m-d', $date_sold);
+
+    if ($sid !== '' && $lid !== '' && $qty > 0 && $amount > 0 && $date_ok && $date_ok->format('Y-m-d') === $date_sold) {
+        $pdo->prepare("
+            UPDATE `sales`
+            SET `livestock_id` = :lid,
+                `quantity_sold` = :qty,
+                `amount` = :amt,
+                `date_sold` = :dt
+            WHERE `sales_id` = :sid
+        ")->execute([
+            'lid' => $lid,
+            'qty' => $qty,
+            'amt' => $amount,
+            'dt'  => $date_sold,
+            'sid' => $sid
+        ]);
+        $_SESSION['flash_message'] = "Updated {$sid}.";
+        header("Location: sales.php");
+        exit;
+    } else {
+        $error = "Please select livestock, enter a valid quantity and amount, and provide a valid date.";
     }
 }
 
@@ -68,8 +111,34 @@ foreach ($sales_by_item as $sb) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sales & Income - LivestockPro</title>
+  <title>Sales &amp; Income - LivestockPro</title>
   <link rel="stylesheet" href="css/style.css?v=<?= filemtime(__DIR__ . '/css/style.css') ?>">
+  <style>
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      background: rgba(0, 0, 0, 0.45);
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal-box {
+      background: var(--bg-card);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      width: 100%;
+      max-width: 540px;
+      box-shadow: var(--shadow-modal);
+    }
+    .modal-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 12px;
+    }
+  </style>
 </head>
 <body>
   <div class="app-shell">
@@ -111,6 +180,9 @@ foreach ($sales_by_item as $sb) {
 
       <?php if ($message !== ""): ?>
         <div class="alert alert-success"><?= htmlspecialchars($message) ?></div>
+      <?php endif; ?>
+      <?php if ($error !== ""): ?>
+        <div class="alert alert-error"><?= htmlspecialchars($error) ?></div>
       <?php endif; ?>
 
       <?php if ($role === 'O'): ?>
@@ -202,7 +274,13 @@ foreach ($sales_by_item as $sb) {
                 <td style="white-space:nowrap;"><?= htmlspecialchars($r['date_sold']) ?></td>
                 <?php if ($role === 'O'): ?>
                   <td>
-                    <a class="btn btn-sm btn-edit" href="sales.php?edit=<?= urlencode($r['sales_id']) ?>">EDIT</a>
+                    <button type="button" class="btn btn-sm btn-edit"
+                      data-id="<?= htmlspecialchars($r['sales_id']) ?>"
+                      data-lid="<?= htmlspecialchars($r['livestock_id']) ?>"
+                      data-qty="<?= htmlspecialchars((string)$r['quantity_sold']) ?>"
+                      data-amount="<?= htmlspecialchars((string)$r['amount']) ?>"
+                      data-date="<?= htmlspecialchars(substr((string)$r['date_sold'], 0, 10)) ?>"
+                      onclick="openEditSaleModal(this)">EDIT</button>
                     <a class="btn btn-sm btn-delete" href="sales.php?delete=<?= urlencode($r['sales_id']) ?>" onclick="return confirm('Delete sale?')" title="Delete"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg></a>
                   </td>
                 <?php endif; ?>
@@ -213,5 +291,63 @@ foreach ($sales_by_item as $sb) {
       </div>
     </main>
   </div>
+
+  <?php if ($role === 'O'): ?>
+  <div class="modal-backdrop" id="editSaleModal">
+    <div class="modal-box">
+      <div class="card-title">Edit Sale</div>
+      <form method="POST" action="sales.php">
+        <input type="hidden" name="sales_id" id="edit_sale_id">
+        <div class="form-grid-2">
+          <div class="form-group">
+            <label class="form-label">LIVESTOCK</label>
+            <select class="form-control" name="livestock_id" id="edit_sale_livestock_id" required>
+              <?php foreach ($livestock_list as $lv): ?>
+                <option value="<?= htmlspecialchars($lv['livestock_id']) ?>">
+                  <?= htmlspecialchars($lv['livestock_id'] . ' - ' . $lv['animal_type'] . ' (' . $lv['breed'] . ')') ?>
+                </option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">QUANTITY</label>
+            <input class="form-control" type="number" name="quantity_sold" id="edit_sale_quantity" min="1" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">AMOUNT</label>
+            <input class="form-control" type="number" step="0.01" min="0.01" name="amount" id="edit_sale_amount" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">DATE</label>
+            <input class="form-control" type="date" name="date_sold" id="edit_sale_date" required>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-primary" type="submit" name="edit_sale">SAVE CHANGES</button>
+          <button class="btn" type="button" onclick="closeEditSaleModal()">CANCEL</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    function openEditSaleModal(btn) {
+      document.getElementById('edit_sale_id').value           = btn.dataset.id;
+      document.getElementById('edit_sale_livestock_id').value = btn.dataset.lid;
+      document.getElementById('edit_sale_quantity').value     = btn.dataset.qty;
+      document.getElementById('edit_sale_amount').value       = btn.dataset.amount;
+      document.getElementById('edit_sale_date').value         = btn.dataset.date;
+      document.getElementById('editSaleModal').classList.add('open');
+    }
+
+    function closeEditSaleModal() {
+      document.getElementById('editSaleModal').classList.remove('open');
+    }
+
+    document.getElementById('editSaleModal').addEventListener('click', function (e) {
+      if (e.target === this) closeEditSaleModal();
+    });
+  </script>
+  <?php endif; ?>
 </body>
 </html>
