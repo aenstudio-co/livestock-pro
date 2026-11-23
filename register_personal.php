@@ -7,38 +7,47 @@ $business_name = ($role === 'O')
     ? ($_SESSION['signup_business_info']['business_name'] ?? '')
     : ($_SESSION['signup_business'] ?? '');
 
+$today = date('Y-m-d');
+$maxBirthdate = date('Y-m-d', strtotime('-1 day'));
 $error = "";
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
+        $fn = trim($_POST['first_name'] ?? '');
+        $ln = trim($_POST['last_name'] ?? '');
+        $email = trim($_POST['email'] ?? '');
+        $rawPassword = trim($_POST['password'] ?? '');
+        $bday = trim($_POST['birthdate'] ?? '');
+        $sex = trim($_POST['sex'] ?? 'Male');
+        $cnum = trim($_POST['contact_number'] ?? '');
+
+        if ($bday === '' || $bday >= $today) {
+            throw new Exception("Birthdate cannot be today or a future date.");
+        }
+
         $pdo->beginTransaction();
         $uCount = (int)$pdo->query("SELECT COUNT(*) FROM `user`")->fetchColumn() + 1;
         $aCount = (int)$pdo->query("SELECT COUNT(*) FROM `address`")->fetchColumn() + 1;
         $new_user_id = sprintf("USE-%05d", $uCount);
         $new_addr_id = sprintf("ADD-%05d", $aCount);
 
-        $fn = trim($_POST['first_name'] ?? '');
-        $ln = trim($_POST['last_name'] ?? '');
-        $email = trim($_POST['email'] ?? '');
+        $cleanFirst = preg_replace('/[^a-zA-Z]/', '', $fn);
+        $baseUname = ($cleanFirst !== '' ? ucfirst(strtolower($cleanFirst)) : 'User');
+        $username = sprintf("%s%02d", $baseUname, $uCount);
 
-        $rawBase = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $fn . $ln));
-        if ($rawBase === '' && str_contains($email, '@')) {
-            $rawBase = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', strstr($email, '@', true)));
-        }
-        if ($rawBase === '') {
-            $rawBase = strtolower($new_user_id);
-        }
-
-        $username = $rawBase;
         $checkStmt = $pdo->prepare("SELECT COUNT(*) FROM `user` WHERE `username` = :uname");
-        $suffix = 1;
+        $suffix = $uCount + 1;
         while (true) {
             $checkStmt->execute(['uname' => $username]);
             if ((int)$checkStmt->fetchColumn() === 0) {
                 break;
             }
-            $username = $rawBase . $suffix;
+            $username = sprintf("%s%02d", $baseUname, $suffix);
             $suffix++;
         }
+
+        // Only the hash is stored in the database
+        $hashedPassword = password_hash($rawPassword, PASSWORD_DEFAULT);
 
         $pdo->prepare("
             INSERT INTO `address` (`address_id`, `user_id`, `HouseNumber`, `Street`, `Barangay`, `Municipality_City`, `Province`, `ZipCode`)
@@ -64,10 +73,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'ln'    => $ln,
             'email' => $email,
             'uname' => $username,
-            'pw'    => password_hash(trim($_POST['password'] ?? ''), PASSWORD_DEFAULT),
-            'bday'  => trim($_POST['birthdate'] ?? ''),
-            'sex'   => trim($_POST['sex'] ?? 'Male'),
-            'cnum'  => trim($_POST['contact_number'] ?? ''),
+            'pw'    => $hashedPassword,
+            'bday'  => $bday,
+            'sex'   => $sex,
+            'cnum'  => $cnum,
             'aid'   => $new_addr_id,
             'utype' => $role
         ]);
@@ -94,7 +103,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header("Location: signup_done.php?mode=" . ($role === 'S' ? 'staff' : 'owner'));
         exit;
     } catch (Exception $e) {
-        $pdo->rollBack();
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
         $error = "Registration error: " . $e->getMessage();
     }
 }
@@ -135,7 +146,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
               <div class="form-group">
                 <label class="form-label">BIRTHDATE</label>
-                <input class="form-control" type="date" name="birthdate" required>
+                <input class="form-control" type="date" name="birthdate" max="<?= htmlspecialchars($maxBirthdate) ?>" required>
               </div>
               <div class="form-group">
                 <label class="form-label">SEX</label>
