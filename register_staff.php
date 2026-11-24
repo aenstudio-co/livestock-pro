@@ -39,9 +39,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <p>Select a registered business to continue.</p>
     </div>
     <div class="auth-card">
-      <form method="POST" action="register_staff.php">
+      <form method="POST" action="register_staff.php" id="staffForm" novalidate>
         <div class="form-group">
-          <input class="form-control" type="text" id="searchFarm" placeholder="Search Farm..." onkeyup="filterFarms()">
+          <input class="form-control" type="text" id="searchFarm" placeholder="Search Farm..." autocomplete="off" oninput="filterFarms()">
         </div>
         <div class="form-label">RECOMMENDED</div>
         <div class="business-list" id="farmList">
@@ -55,18 +55,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
               </label>
             <?php endforeach; ?>
           <?php endif; ?>
+          <div id="noBusinessMsg" style="display:none;font-size:13px;color:#dc2626;padding:10px 0;">No business found.</div>
         </div>
         <button class="btn btn-primary btn-block" type="submit">CONTINUE</button>
       </form>
     </div>
   </div>
   <script>
+    const defaultMsg = 'No business found.';
+    const continueMsg = 'No business found. Please select an existing registered business to continue.';
+
     function filterFarms() {
-      const q = document.getElementById('searchFarm').value.toLowerCase();
+      const q = document.getElementById('searchFarm').value.trim().toLowerCase();
+      let visibleCount = 0;
+
       document.querySelectorAll('#farmList .farm-item').forEach(el => {
-        el.style.display = el.textContent.toLowerCase().includes(q) ? 'flex' : 'none';
+        const matches = el.textContent.toLowerCase().includes(q);
+        el.style.display = matches ? 'flex' : 'none';
+
+        const radio = el.querySelector('input[type="radio"]');
+        if (radio) {
+          radio.checked = false;
+        }
+
+        if (matches) {
+          visibleCount++;
+        }
       });
+
+      const noBusinessMsg = document.getElementById('noBusinessMsg');
+      if (noBusinessMsg) {
+        noBusinessMsg.textContent = defaultMsg;
+        noBusinessMsg.style.setProperty('display', visibleCount === 0 ? 'block' : 'none', 'important');
+      }
     }
+
+    document.getElementById('staffForm').addEventListener('submit', function (e) {
+      const checked = document.querySelector('#farmList .farm-item input[type="radio"]:checked');
+      if (!checked || checked.closest('.farm-item').style.display === 'none') {
+        e.preventDefault();
+        const noBusinessMsg = document.getElementById('noBusinessMsg');
+        if (noBusinessMsg) {
+          noBusinessMsg.textContent = continueMsg;
+          noBusinessMsg.style.setProperty('display', 'block', 'important');
+        }
+      }
+    });
   </script>
 </body>
 </html>
