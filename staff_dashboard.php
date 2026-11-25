@@ -7,8 +7,30 @@ $user_id   = $_SESSION['user_id'];
 $business  = strtoupper($_SESSION['business_name'] ?? 'BUSINESS NAME STAFF');
 
 $total_livestock = (int)$pdo->query("SELECT COALESCE(SUM(quantity), 0) FROM `livestock`")->fetchColumn();
-$pending_tasks   = (int)$pdo->query("SELECT COUNT(*) FROM `task_schedule` WHERE `task_status` = 'Pending'")->fetchColumn();
-$tasks           = $pdo->query("SELECT task_id, task_name, task_description, schedule_date FROM `task_schedule` ORDER BY schedule_date ASC LIMIT 5")->fetchAll();
+
+$stmt_p = $pdo->prepare("SELECT COUNT(*) FROM `task_schedule` WHERE `user_id` = :uid AND `task_status` = 'Pending'");
+$stmt_p->execute(['uid' => $user_id]);
+$pending_tasks = (int)$stmt_p->fetchColumn();
+
+$stmt_t = $pdo->prepare("
+    SELECT task_id, task_name, task_description, schedule_date
+    FROM `task_schedule`
+    WHERE `user_id` = :uid AND `task_status` != 'Completed'
+    ORDER BY schedule_date ASC, task_id ASC
+    LIMIT 5
+");
+$stmt_t->execute(['uid' => $user_id]);
+$tasks = $stmt_t->fetchAll();
+
+$stmt_h = $pdo->prepare("
+    SELECT task_id, task_name, task_description, schedule_date
+    FROM `task_schedule`
+    WHERE `user_id` = :uid AND `task_status` = 'Completed'
+    ORDER BY schedule_date DESC, task_id DESC
+    LIMIT 5
+");
+$stmt_h->execute(['uid' => $user_id]);
+$recent_history = $stmt_h->fetchAll();
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -92,6 +114,9 @@ $tasks           = $pdo->query("SELECT task_id, task_name, task_description, sch
           <table class="data-table">
             <thead><tr><th>NO.</th><th>ID.</th><th>TASK</th><th>DESCRIPTION</th><th>DATE</th></tr></thead>
             <tbody>
+              <?php if (empty($tasks)): ?>
+                <tr><td colspan="5" style="text-align:center;color:var(--text-muted);">No upcoming tasks assigned to you.</td></tr>
+              <?php endif; ?>
               <?php foreach ($tasks as $i => $t): ?>
                 <tr>
                   <td><?= $i + 1 ?></td>
@@ -106,13 +131,16 @@ $tasks           = $pdo->query("SELECT task_id, task_name, task_description, sch
         </div>
         <div class="card">
           <div class="card-title">Recent History</div>
-          <?php foreach ($tasks as $t): ?>
+          <?php if (empty($recent_history)): ?>
+            <div style="font-size:12px;color:var(--text-muted);padding:6px 0;">No completed tasks yet.</div>
+          <?php endif; ?>
+          <?php foreach ($recent_history as $h): ?>
             <div class="history-row">
               <div class="history-left">
                 <div class="history-dot"></div>
                 <div>
                   <div style="font-size:12px;font-weight:600;"><?= htmlspecialchars($full_name) ?></div>
-                  <div style="font-size:10px;color:var(--text-secondary);"><?= htmlspecialchars($user_id) ?></div>
+                  <div style="font-size:10px;color:var(--text-secondary);"><?= htmlspecialchars($user_id) ?> &middot; <?= htmlspecialchars($h['task_name']) ?></div>
                 </div>
               </div>
               <div style="font-size:11px;color:var(--text-secondary);">Finished Tasked</div>
