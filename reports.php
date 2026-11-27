@@ -2,9 +2,21 @@
 require_once 'includes/db_connect.php';
 if (!isset($_SESSION['user_id'])) { header("Location: login.php"); exit; }
 
+$role = strtoupper($_SESSION['user_type'] ?? 'O');
+if ($role !== 'O') {
+    header("Location: staff_dashboard.php");
+    exit;
+}
+
 $full_name = trim(($_SESSION['first_name'] ?? 'Juan') . ' ' . ($_SESSION['last_name'] ?? 'Dela Cruz'));
 $user_id   = $_SESSION['user_id'];
 $business  = trim((string)($_SESSION['business_name'] ?? ''));
+$message   = "";
+
+if (isset($_SESSION['flash_message'])) {
+    $message = $_SESSION['flash_message'];
+    unset($_SESSION['flash_message']);
+}
 
 $liv_stmt = $pdo->prepare("
     SELECT COALESCE(SUM(l.quantity), 0)
@@ -36,6 +48,43 @@ $total_income = (float)$inc_stmt->fetchColumn();
 
 $profit = $total_income - $total_expenses;
 $roi    = ($total_expenses > 0) ? (($total_income - $total_expenses) / $total_expenses) * 100 : 0;
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_report'])) {
+    $max_num = (int)$pdo->query("SELECT COALESCE(MAX(CAST(SUBSTRING(`report_id`, 5) AS UNSIGNED)), 0) FROM `report`")->fetchColumn();
+    $new_id  = sprintf("REP-%05d", $max_num + 1);
+
+    $ins_rep = $pdo->prepare("
+        INSERT INTO `report` (`report_id`, `user_id`, `total_sales`, `total_expenses`, `net_profit_loss`, `roi`, `date_generated`)
+        VALUES (:rid, :uid, :tsales, :texp, :profit, :roi, NOW())
+    ");
+    $ins_rep->execute([
+        'rid'    => $new_id,
+        'uid'    => $user_id,
+        'tsales' => round($total_income, 2),
+        'texp'   => round($total_expenses, 2),
+        'profit' => round($profit, 2),
+        'roi'    => round(max(-999.99, min(999.99, $roi)), 2)
+    ]);
+
+    $_SESSION['flash_message'] = "Report {$new_id} saved to history.";
+    header("Location: reports.php");
+    exit;
+}
+
+if (isset($_GET['delete_report'])) {
+    $del_stmt = $pdo->prepare("
+        DELETE FROM `report`
+        WHERE `report_id` = :rid
+          AND `user_id` COLLATE utf8mb4_unicode_ci = :uid COLLATE utf8mb4_unicode_ci
+    ");
+    $del_stmt->execute([
+        'rid' => trim($_GET['delete_report']),
+        'uid' => $user_id
+    ]);
+    $_SESSION['flash_message'] = "Report record removed.";
+    header("Location: reports.php");
+    exit;
+}
 
 $exp_cnt_stmt = $pdo->prepare("
     SELECT COUNT(*)
@@ -96,6 +145,15 @@ $bec_stmt = $pdo->prepare("
 ");
 $bec_stmt->execute(['bname' => $business]);
 $by_exp_cat = $bec_stmt->fetchAll();
+
+$rep_hist_stmt = $pdo->prepare("
+    SELECT report_id, user_id, total_sales, total_expenses, net_profit_loss, roi, date_generated
+    FROM `report`
+    WHERE `user_id` COLLATE utf8mb4_unicode_ci = :uid COLLATE utf8mb4_unicode_ci
+    ORDER BY `date_generated` DESC, `report_id` DESC
+");
+$rep_hist_stmt->execute(['uid' => $user_id]);
+$report_history = $rep_hist_stmt->fetchAll();
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -207,6 +265,16 @@ $by_exp_cat = $bec_stmt->fetchAll();
       gap: 20px;
       align-items: start;
     }
+    .card-header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .card-header-row .card-title {
+      margin-bottom: 0;
+    }
     @media (max-width: 960px) {
       .roi-calc-split, .sales-summary-grid {
         grid-template-columns: 1fr;
@@ -251,10 +319,14 @@ $by_exp_cat = $bec_stmt->fetchAll();
         <div>
           <h1 class="page-title">Report</h1>
           <div class="page-subtitle">Livestock Farm Summary Report</div>
-          <div class="page-meta-tag">FARMER: <?= htmlspecialchars($full_name) ?> | GENERATED: <?= date('F d, Y \a\t g:i A') ?></div>
+          <div class="page-meta-tag">FARMER: <?= htmlspecialchars($full_name) ?> | GENERATED: <?= date('F d, Y \a\t H:i') ?></div>
         </div>
         <div class="page-datetime"><?= date('F d, Y | H:i:s') ?></div>
       </div>
+
+      <?php if ($message !== ""): ?>
+        <div class="alert alert-success"><?= htmlspecialchars($message) ?></div>
+      <?php endif; ?>
 
       <div class="kpi-grid-4">
         <div class="kpi-card">
@@ -441,6 +513,47 @@ $by_exp_cat = $bec_stmt->fetchAll();
             </tbody>
           </table>
         </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header-row">
+          <div class="card-title">Report History</div>
+          <form method="POST" action="reports.php" style="margin:0;">
+            <button class="btn btn-primary btn-sm" type="submit" name="save_report">SAVE SNAPSHOT</button>
+          </form>
+        </div>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>NO.</th>
+              <th>TOTAL SALES</th>
+              <th>TOTAL EXPENSES</th>
+              <th>NET PROFIT / LOSS</th>
+              <th>ROI</th>
+              <th>DATE GENERATED</th>
+              <th>ACTIONS</th>
+            </tr>
+          </thead>
+          <tbody>
+            <?php if (empty($report_history)): ?>
+              <tr><td colspan="7" style="text-align:center;">No report history saved yet.</td></tr>
+            <?php endif; ?>
+            <?php foreach ($report_history as $i => $rep): ?>
+              <?php $net_val = (float)$rep['net_profit_loss']; ?>
+              <tr>
+                <td><?= $i + 1 ?></td>
+                <td>&#8369;<?= number_format((float)$rep['total_sales'], 2) ?></td>
+                <td>&#8369;<?= number_format((float)$rep['total_expenses'], 2) ?></td>
+                <td><?= ($net_val < 0 ? '-' : '') ?>&#8369;<?= number_format(abs($net_val), 2) ?></td>
+                <td><?= number_format((float)$rep['roi'], 2) ?>%</td>
+                <td style="white-space:nowrap;"><?= htmlspecialchars(date('Y-m-d H:i', strtotime((string)$rep['date_generated']))) ?></td>
+                <td>
+                  <a class="btn btn-sm btn-delete" href="reports.php?delete_report=<?= urlencode($rep['report_id']) ?>" onclick="return confirm('Delete report record?')" title="Delete"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg></a>
+                </td>
+              </tr>
+            <?php endforeach; ?>
+          </tbody>
+        </table>
       </div>
     </main>
   </div>

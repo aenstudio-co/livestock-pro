@@ -308,6 +308,52 @@ $pending_staff_rows = $pending_staff_stmt->fetchAll();
       padding: 5px 12px;
       font-size: 10px;
     }
+    .table-header-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: nowrap;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .table-header-bar .card-title {
+      margin-bottom: 0;
+      white-space: nowrap;
+    }
+    .sort-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--text-secondary);
+      flex-shrink: 0;
+    }
+    .sort-select {
+      padding: 5px 9px;
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      background: var(--bg-input);
+      color: var(--text-primary);
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .sort-select:focus {
+      outline: none;
+      background: var(--bg-input-focus);
+      border-color: var(--teal-700);
+    }
+    table.data-table thead th.sortable {
+      cursor: pointer;
+      user-select: none;
+    }
+    table.data-table thead th.sorted-asc::after {
+      content: " \2191";
+      font-size: 11px;
+    }
+    table.data-table thead th.sorted-desc::after {
+      content: " \2193";
+      font-size: 11px;
+    }
     @media (max-width: 960px) {
       .staff-hero-stats {
         flex-wrap: wrap;
@@ -317,6 +363,9 @@ $pending_staff_rows = $pending_staff_stmt->fetchAll();
         padding-left: 0;
         border-left: none;
         text-align: left;
+      }
+      .table-header-bar {
+        flex-wrap: wrap;
       }
     }
   </style>
@@ -533,10 +582,24 @@ $pending_staff_rows = $pending_staff_stmt->fetchAll();
             </div>
 
             <div class="card">
-              <div class="card-title">Investment History</div>
-              <table class="data-table">
+              <div class="table-header-bar">
+                <div class="card-title">Investment History</div>
+                <div class="sort-controls">
+                  <label for="investmentSortSelect">Sort By:</label>
+                  <select id="investmentSortSelect" class="sort-select">
+                    <option value="">Default</option>
+                    <option value="2|desc|date">Date (Newest First)</option>
+                    <option value="1|desc|number">Amount (High &rarr; Low)</option>
+                  </select>
+                </div>
+              </div>
+              <table class="data-table" id="investmentHistoryTable">
                 <thead>
-                  <tr><th>DESCRIPTION</th><th>AMOUNT</th><th>DATE</th></tr>
+                  <tr>
+                    <th>DESCRIPTION</th>
+                    <th class="sortable" data-col="1" data-type="number" title="Click to sort">AMOUNT</th>
+                    <th class="sortable" data-col="2" data-type="date" title="Click to sort">DATE</th>
+                  </tr>
                 </thead>
                 <tbody>
                   <?php if (empty($investment_history)): ?>
@@ -637,5 +700,78 @@ $pending_staff_rows = $pending_staff_stmt->fetchAll();
       </div>
     </main>
   </div>
+
+  <script>
+    (function () {
+      const table = document.getElementById('investmentHistoryTable');
+      const select = document.getElementById('investmentSortSelect');
+      if (!table || !select) return;
+
+      const tbody = table.tBodies[0];
+      const headers = Array.from(table.querySelectorAll('thead th.sortable'));
+      const initialRows = Array.from(tbody.querySelectorAll('tr')).filter((tr) => !tr.querySelector('td[colspan]'));
+      if (!initialRows.length) return;
+
+      const parseVal = (cell, type) => {
+        const raw = (cell ? cell.textContent : '').trim();
+        if (type === 'number') {
+          const num = parseFloat(raw.replace(/[^0-9.-]/g, ''));
+          return Number.isNaN(num) ? -Infinity : num;
+        }
+        if (type === 'date') {
+          const ts = Date.parse(raw);
+          return Number.isNaN(ts) ? -Infinity : ts;
+        }
+        return raw.toLowerCase();
+      };
+
+      const applySort = (colIndex, dir, type) => {
+        headers.forEach((h) => h.classList.remove('sorted-asc', 'sorted-desc'));
+
+        if (!dir) {
+          initialRows.forEach((tr) => tbody.appendChild(tr));
+          select.value = '';
+          return;
+        }
+
+        const rowsToSort = Array.from(tbody.querySelectorAll('tr')).filter((tr) => !tr.querySelector('td[colspan]'));
+        rowsToSort.sort((a, b) => {
+          const valA = parseVal(a.children[colIndex], type);
+          const valB = parseVal(b.children[colIndex], type);
+          const cmp = valA - valB;
+          return dir === 'asc' ? cmp : -cmp;
+        });
+
+        rowsToSort.forEach((tr) => tbody.appendChild(tr));
+
+        const activeTh = headers.find((h) => Number(h.dataset.col) === Number(colIndex));
+        if (activeTh) {
+          activeTh.dataset.sortDir = dir;
+          activeTh.classList.add(dir === 'asc' ? 'sorted-asc' : 'sorted-desc');
+        }
+      };
+
+      headers.forEach((th) => {
+        th.addEventListener('click', () => {
+          const nextDir = th.dataset.sortDir === 'asc' ? 'desc' : 'asc';
+          const col = Number(th.dataset.col);
+          const type = th.dataset.type || 'number';
+          applySort(col, nextDir, type);
+          const optVal = `${col}|${nextDir}|${type}`;
+          select.value = Array.from(select.options).some((o) => o.value === optVal) ? optVal : '';
+        });
+      });
+
+      select.addEventListener('change', () => {
+        if (!select.value) {
+          headers.forEach((h) => delete h.dataset.sortDir);
+          applySort(null, null, null);
+          return;
+        }
+        const [col, dir, type] = select.value.split('|');
+        applySort(Number(col), dir, type);
+      });
+    })();
+  </script>
 </body>
 </html>

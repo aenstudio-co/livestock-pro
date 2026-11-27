@@ -148,6 +148,45 @@ $records = $rec_stmt->fetchAll();
       gap: 10px;
       margin-top: 12px;
     }
+    .table-header-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .table-header-bar .card-title {
+      margin-bottom: 0;
+    }
+    .sort-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+    .sort-select {
+      padding: 6px 10px;
+      border: 1px solid var(--border-color, #d0d7d7);
+      border-radius: 6px;
+      background: var(--bg-card, #ffffff);
+      color: var(--text-primary, #1e2525);
+      font-size: 12px;
+      cursor: pointer;
+    }
+    table.data-table thead th.sortable {
+      cursor: pointer;
+      user-select: none;
+    }
+    table.data-table thead th.sorted-asc::after {
+      content: " \2191";
+      font-size: 11px;
+    }
+    table.data-table thead th.sorted-desc::after {
+      content: " \2193";
+      font-size: 11px;
+    }
   </style>
 </head>
 <body>
@@ -256,11 +295,30 @@ $records = $rec_stmt->fetchAll();
       </div>
 
       <div class="card">
-        <div class="card-title">Livestock Records</div>
-        <table class="data-table">
+        <div class="table-header-bar">
+          <div class="card-title">Livestock Records</div>
+          <div class="sort-controls">
+            <label for="livestockSortSelect">Sort By:</label>
+            <select id="livestockSortSelect" class="sort-select">
+              <option value="">Default</option>
+              <option value="1|asc|string">Type (A &rarr; Z)</option>
+              <option value="2|asc|string">Breed (A &rarr; Z)</option>
+              <option value="3|desc|number">Quantity (High &rarr; Low)</option>
+              <option value="4|desc|number">Weight (High &rarr; Low)</option>
+              <option value="5|asc|health">Health (Healthy &rarr; Deceased)</option>
+            </select>
+          </div>
+        </div>
+        <table class="data-table" id="livestockTable">
           <thead>
             <tr>
-              <th>NO.</th><th>TYPE</th><th>BREED</th><th>QUANTITY</th><th>WEIGHT (KG)</th><th>HEALTH</th><th>VACCINATION</th>
+              <th>NO.</th>
+              <th class="sortable" data-col="1" data-type="string" title="Click to sort">TYPE</th>
+              <th class="sortable" data-col="2" data-type="string" title="Click to sort">BREED</th>
+              <th class="sortable" data-col="3" data-type="number" title="Click to sort">QUANTITY</th>
+              <th class="sortable" data-col="4" data-type="number" title="Click to sort">WEIGHT (KG)</th>
+              <th class="sortable" data-col="5" data-type="health" title="Click to sort">HEALTH</th>
+              <th class="sortable" data-col="6" data-type="vacc" title="Click to sort">VACCINATION</th>
               <?php if ($role === 'O'): ?><th>ACTIONS</th><?php endif; ?>
             </tr>
           </thead>
@@ -295,6 +353,109 @@ $records = $rec_stmt->fetchAll();
       </div>
     </main>
   </div>
+
+  <script>
+    (function () {
+      const table = document.getElementById('livestockTable');
+      const select = document.getElementById('livestockSortSelect');
+      if (!table || !select) return;
+
+      const tbody = table.tBodies[0];
+      const headers = Array.from(table.querySelectorAll('thead th.sortable'));
+      const initialRows = Array.from(tbody.querySelectorAll('tr'));
+
+      const healthRank = {
+        HEALTHY: 1,
+        RECOVERED: 2,
+        QUARANTINED: 3,
+        SICK: 4,
+        DECEASED: 5
+      };
+
+      const vaccRank = {
+        VACCINATED: 1,
+        PARTIAL: 2,
+        UNVACCINATED: 3
+      };
+
+      const parseVal = (cell, type) => {
+        const raw = (cell ? cell.textContent : '').trim();
+        const upper = raw.toUpperCase();
+        if (type === 'number') {
+          const num = parseFloat(raw.replace(/[^0-9.-]/g, ''));
+          return Number.isNaN(num) ? -Infinity : num;
+        }
+        if (type === 'health') {
+          return healthRank[upper] ?? 99;
+        }
+        if (type === 'vacc') {
+          return vaccRank[upper] ?? 99;
+        }
+        return raw.toLowerCase();
+      };
+
+      const renumber = () => {
+        let n = 1;
+        Array.from(tbody.querySelectorAll('tr')).forEach((tr) => {
+          if (tr.children[0]) tr.children[0].textContent = n++;
+        });
+      };
+
+      const applySort = (colIndex, dir, type) => {
+        headers.forEach((h) => h.classList.remove('sorted-asc', 'sorted-desc'));
+
+        const rowsToSort = Array.from(tbody.querySelectorAll('tr'));
+        if (!dir) {
+          initialRows.forEach((tr) => tbody.appendChild(tr));
+          renumber();
+          select.value = '';
+          return;
+        }
+
+        rowsToSort.sort((a, b) => {
+          const valA = parseVal(a.children[colIndex], type);
+          const valB = parseVal(b.children[colIndex], type);
+          let cmp = 0;
+          if (type === 'number' || type === 'health' || type === 'vacc') {
+            cmp = valA - valB;
+          } else {
+            cmp = String(valA).localeCompare(String(valB), undefined, { numeric: true, sensitivity: 'base' });
+          }
+          return dir === 'asc' ? cmp : -cmp;
+        });
+
+        rowsToSort.forEach((tr) => tbody.appendChild(tr));
+        renumber();
+
+        const activeTh = headers.find((h) => Number(h.dataset.col) === Number(colIndex));
+        if (activeTh) {
+          activeTh.dataset.sortDir = dir;
+          activeTh.classList.add(dir === 'asc' ? 'sorted-asc' : 'sorted-desc');
+        }
+      };
+
+      headers.forEach((th) => {
+        th.addEventListener('click', () => {
+          const nextDir = th.dataset.sortDir === 'asc' ? 'desc' : 'asc';
+          const col = Number(th.dataset.col);
+          const type = th.dataset.type || 'string';
+          applySort(col, nextDir, type);
+          const optVal = `${col}|${nextDir}|${type}`;
+          select.value = Array.from(select.options).some((o) => o.value === optVal) ? optVal : '';
+        });
+      });
+
+      select.addEventListener('change', () => {
+        if (!select.value) {
+          headers.forEach((h) => delete h.dataset.sortDir);
+          applySort(null, null, null);
+          return;
+        }
+        const [col, dir, type] = select.value.split('|');
+        applySort(Number(col), dir, type);
+      });
+    })();
+  </script>
 
   <?php if ($role === 'O'): ?>
   <div class="modal-backdrop" id="editLivestockModal">

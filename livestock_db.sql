@@ -36,7 +36,7 @@ CREATE TABLE `address` (
   `Municipality_City` varchar(45) NOT NULL,
   `Province` varchar(50) NOT NULL,
   `ZipCode` varchar(4) NOT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 --
 -- Dumping data for table `address`
@@ -193,7 +193,7 @@ CREATE TABLE `owner` (
   `bus_started` date NOT NULL,
   `TIN_num` varchar(15) NOT NULL,
   `bus_ContactNum` varchar(15) NOT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 --
 -- Dumping data for table `owner`
@@ -302,7 +302,7 @@ CREATE TABLE `staff` (
   `user_id` varchar(45) NOT NULL,
   `date_hired` date DEFAULT NULL,
   `staff_status` enum('Pending','Approved') NOT NULL DEFAULT 'Pending'
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 --
 -- Dumping data for table `staff`

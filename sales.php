@@ -164,6 +164,45 @@ foreach ($sales_by_item as $sb) {
       gap: 10px;
       margin-top: 12px;
     }
+    .table-header-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .table-header-bar .card-title {
+      margin-bottom: 0;
+    }
+    .sort-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+    .sort-select {
+      padding: 6px 10px;
+      border: 1px solid var(--border-color, #d0d7d7);
+      border-radius: 6px;
+      background: var(--bg-card, #ffffff);
+      color: var(--text-primary, #1e2525);
+      font-size: 12px;
+      cursor: pointer;
+    }
+    table.data-table thead th.sortable {
+      cursor: pointer;
+      user-select: none;
+    }
+    table.data-table thead th.sorted-asc::after {
+      content: " \2191";
+      font-size: 11px;
+    }
+    table.data-table thead th.sorted-desc::after {
+      content: " \2193";
+      font-size: 11px;
+    }
   </style>
 </head>
 <body>
@@ -282,11 +321,26 @@ foreach ($sales_by_item as $sb) {
       <?php endif; ?>
 
       <div class="card">
-        <div class="card-title">Sales Record</div>
-        <table class="data-table">
+        <div class="table-header-bar">
+          <div class="card-title">Sales Record</div>
+          <div class="sort-controls">
+            <label for="salesSortSelect">Sort By:</label>
+            <select id="salesSortSelect" class="sort-select">
+              <option value="">Default</option>
+              <option value="4|desc|date">Date (Newest First)</option>
+              <option value="3|desc|number">Amount (High &rarr; Low)</option>
+              <option value="2|desc|number">Quantity (High &rarr; Low)</option>
+            </select>
+          </div>
+        </div>
+        <table class="data-table" id="salesTable">
           <thead>
             <tr>
-              <th>NO.</th><th>LIVESTOCK SOLD</th><th>QUANTITY</th><th>AMOUNT</th><th>DATE</th>
+              <th>NO.</th>
+              <th>LIVESTOCK SOLD</th>
+              <th class="sortable" data-col="2" data-type="number" title="Click to sort">QUANTITY</th>
+              <th class="sortable" data-col="3" data-type="number" title="Click to sort">AMOUNT</th>
+              <th class="sortable" data-col="4" data-type="date" title="Click to sort">DATE</th>
               <?php if ($role === 'O'): ?><th>ACTIONS</th><?php endif; ?>
             </tr>
           </thead>
@@ -317,6 +371,92 @@ foreach ($sales_by_item as $sb) {
       </div>
     </main>
   </div>
+
+  <script>
+    (function () {
+      const table = document.getElementById('salesTable');
+      const select = document.getElementById('salesSortSelect');
+      if (!table || !select) return;
+
+      const tbody = table.tBodies[0];
+      const headers = Array.from(table.querySelectorAll('thead th.sortable'));
+      const initialRows = Array.from(tbody.querySelectorAll('tr'));
+
+      const parseVal = (cell, type) => {
+        const raw = (cell ? cell.textContent : '').trim();
+        if (type === 'number') {
+          const num = parseFloat(raw.replace(/[^0-9.-]/g, ''));
+          return Number.isNaN(num) ? -Infinity : num;
+        }
+        if (type === 'date') {
+          const ts = Date.parse(raw);
+          return Number.isNaN(ts) ? -Infinity : ts;
+        }
+        return raw.toLowerCase();
+      };
+
+      const renumber = () => {
+        let n = 1;
+        Array.from(tbody.querySelectorAll('tr')).forEach((tr) => {
+          if (tr.children[0]) tr.children[0].textContent = n++;
+        });
+      };
+
+      const applySort = (colIndex, dir, type) => {
+        headers.forEach((h) => h.classList.remove('sorted-asc', 'sorted-desc'));
+
+        const rowsToSort = Array.from(tbody.querySelectorAll('tr'));
+        if (!dir) {
+          initialRows.forEach((tr) => tbody.appendChild(tr));
+          renumber();
+          select.value = '';
+          return;
+        }
+
+        rowsToSort.sort((a, b) => {
+          const valA = parseVal(a.children[colIndex], type);
+          const valB = parseVal(b.children[colIndex], type);
+          let cmp = 0;
+          if (type === 'number' || type === 'date') {
+            cmp = valA - valB;
+          } else {
+            cmp = String(valA).localeCompare(String(valB), undefined, { numeric: true, sensitivity: 'base' });
+          }
+          return dir === 'asc' ? cmp : -cmp;
+        });
+
+        rowsToSort.forEach((tr) => tbody.appendChild(tr));
+        renumber();
+
+        const activeTh = headers.find((h) => Number(h.dataset.col) === Number(colIndex));
+        if (activeTh) {
+          activeTh.dataset.sortDir = dir;
+          activeTh.classList.add(dir === 'asc' ? 'sorted-asc' : 'sorted-desc');
+        }
+      };
+
+      headers.forEach((th) => {
+        th.addEventListener('click', () => {
+          const nextDir = th.dataset.sortDir === 'asc' ? 'desc' : 'asc';
+          const col = Number(th.dataset.col);
+          const type = th.dataset.type || 'string';
+          applySort(col, nextDir, type);
+          const optVal = `${col}|${nextDir}|${type}`;
+          select.value = Array.from(select.options).some((o) => o.value === optVal) ? optVal : '';
+        });
+      });
+
+      select.addEventListener('change', () => {
+        if (!select.value) {
+          headers.forEach((h) => delete h.dataset.sortDir);
+          applySort(null, null, null);
+          return;
+        }
+        const [col, dir, type] = select.value.split('|');
+        applySort(Number(col), dir, type);
+      });
+    })();
+  </script>
 
   <?php if ($role === 'O'): ?>
   <div class="modal-backdrop" id="editSaleModal">
