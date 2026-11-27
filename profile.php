@@ -35,6 +35,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_profile'])) {
 
     if ($fn === '' || $ln === '') {
         $error = "First name and last name are required.";
+    } elseif ($em !== '' && !preg_match('/^[a-zA-Z0-9._%+-]+@gmail\.com$/i', $em)) {
+        $error = "Email address must end with @gmail.com.";
     } else {
         $pdo->prepare("
             UPDATE `user`
@@ -388,7 +390,7 @@ $pending_staff_rows = $pending_staff_stmt->fetchAll();
 
               <div class="form-group">
                 <label class="form-label">EMAIL</label>
-                <input class="form-control" type="email" name="email" value="<?= htmlspecialchars($u_row['email'] ?? '') ?>">
+                <input class="form-control" type="email" name="email" pattern="^[a-zA-Z0-9._%+-]+@gmail\.com$" title="Email must end with @gmail.com" value="<?= htmlspecialchars($u_row['email'] ?? '') ?>">
               </div>
 
               <hr class="form-divider">

@@ -33,6 +33,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($bday === '' || $bday >= $today) {
             throw new Exception("Birthdate cannot be today or a future date.");
+        } if (!preg_match('/^[a-zA-Z0-9._%+-]+@gmail\.com$/i', $email)) {
+            throw new Exception("Email address must end with @gmail.com.");
         }
 
         $pdo->beginTransaction();
@@ -150,7 +152,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="form-grid-2">
           <div>
             <div class="card-title">Personal</div>
-            <div class="form-group"><label class="form-label">EMAIL</label><input class="form-control" type="email" name="email" required></div>
+            <div class="form-group"><label class="form-label">EMAIL</label><input class="form-control" type="email" name="email" pattern="^[a-zA-Z0-9._%+-]+@gmail\.com$" title="Email must end with @gmail.com" placeholder="example@gmail.com" required></div>
             <div class="form-group"><label class="form-label">PASSWORD</label><input class="form-control" type="password" name="password" maxlength="25" required></div>
             <div class="form-group"><label class="form-label">FIRST NAME</label><input class="form-control" type="text" name="first_name" required></div>
             <div class="form-group"><label class="form-label">LAST NAME</label><input class="form-control" type="text" name="last_name" required></div>
