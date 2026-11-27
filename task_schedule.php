@@ -6,21 +6,32 @@ $full_name = trim(($_SESSION['first_name'] ?? '') . ' ' . ($_SESSION['last_name'
 if ($full_name === '') { $full_name = 'User'; }
 $user_id   = $_SESSION['user_id'];
 $role      = strtoupper($_SESSION['user_type'] ?? 'O');
+$business  = trim((string)($_SESSION['business_name'] ?? ''));
 $is_owner  = ($role === 'O');
 $message   = "";
 
 $allowed_status = ['Pending', 'In Progress', 'Completed', 'Cancelled'];
 
-$staff_rows = $pdo->query("
+$staff_stmt = $pdo->prepare("
     SELECT u.user_id, u.first_name, u.last_name
     FROM `staff` s
     JOIN `user` u ON s.user_id COLLATE utf8mb4_unicode_ci = u.user_id COLLATE utf8mb4_unicode_ci
+    WHERE LOWER(TRIM(u.business_name)) = LOWER(TRIM(:bname))
+      AND LOWER(TRIM(COALESCE(s.staff_status, 'pending'))) = 'approved'
     ORDER BY u.first_name ASC, u.last_name ASC
-")->fetchAll();
+");
+$staff_stmt->execute(['bname' => $business]);
+$staff_rows = $staff_stmt->fetchAll();
 
+$all_users_stmt = $pdo->prepare("
+    SELECT user_id, first_name, last_name
+    FROM `user`
+    WHERE LOWER(TRIM(business_name)) = LOWER(TRIM(:bname))
+");
+$all_users_stmt->execute(['bname' => $business]);
 $staff_map = [];
-foreach ($staff_rows as $sr) {
-    $staff_map[$sr['user_id']] = trim($sr['first_name'] . ' ' . $sr['last_name']);
+foreach ($all_users_stmt->fetchAll() as $ur) {
+    $staff_map[$ur['user_id']] = trim($ur['first_name'] . ' ' . $ur['last_name']);
 }
 if (!isset($staff_map[$user_id])) {
     $staff_map[$user_id] = $full_name;
@@ -102,8 +113,27 @@ if ($is_owner && isset($_GET['delete'])) {
 }
 
 if ($is_owner) {
-    $pending   = $pdo->query("SELECT * FROM `task_schedule` WHERE `task_status` != 'Completed' ORDER BY `task_id` DESC")->fetchAll();
-    $completed = $pdo->query("SELECT * FROM `task_schedule` WHERE `task_status` = 'Completed' ORDER BY `task_id` DESC")->fetchAll();
+    $stmt = $pdo->prepare("
+        SELECT ts.*
+        FROM `task_schedule` ts
+        JOIN `user` u ON ts.user_id COLLATE utf8mb4_unicode_ci = u.user_id COLLATE utf8mb4_unicode_ci
+        WHERE LOWER(TRIM(u.business_name)) = LOWER(TRIM(:bname))
+          AND ts.`task_status` != 'Completed'
+        ORDER BY ts.`task_id` DESC
+    ");
+    $stmt->execute(['bname' => $business]);
+    $pending = $stmt->fetchAll();
+
+    $stmt = $pdo->prepare("
+        SELECT ts.*
+        FROM `task_schedule` ts
+        JOIN `user` u ON ts.user_id COLLATE utf8mb4_unicode_ci = u.user_id COLLATE utf8mb4_unicode_ci
+        WHERE LOWER(TRIM(u.business_name)) = LOWER(TRIM(:bname))
+          AND ts.`task_status` = 'Completed'
+        ORDER BY ts.`task_id` DESC
+    ");
+    $stmt->execute(['bname' => $business]);
+    $completed = $stmt->fetchAll();
 } else {
     $stmt = $pdo->prepare("SELECT * FROM `task_schedule` WHERE `user_id` = :uid AND `task_status` != 'Completed' ORDER BY `task_id` DESC");
     $stmt->execute(['uid' => $user_id]);
