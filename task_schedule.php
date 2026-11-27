@@ -39,7 +39,9 @@ if (!isset($staff_map[$user_id])) {
 
 if ($is_owner && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_task'])) {
     $tname          = trim($_POST['task_name'] ?? '');
-    $sdate          = substr(trim($_POST['schedule_date'] ?? date('Y-m-d')), 0, 10);
+    $raw_sdate      = trim($_POST['schedule_date'] ?? date('Y-m-d\TH:i'));
+    $sdate          = str_replace('T', ' ', $raw_sdate);
+    if (strlen($sdate) === 16) { $sdate .= ':00'; }
     $tdesc          = trim($_POST['task_description'] ?? '');
     $assigned_staff = trim($_POST['assigned_staff'] ?? '');
     $target_user_id = ($assigned_staff !== '') ? $assigned_staff : $user_id;
@@ -64,11 +66,13 @@ if ($is_owner && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_task
 }
 
 if ($is_owner && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_task'])) {
-    $tid   = trim($_POST['task_id'] ?? '');
-    $tname = trim($_POST['task_name'] ?? '');
-    $tdesc = trim($_POST['task_description'] ?? '');
-    $sdate = substr(trim($_POST['schedule_date'] ?? ''), 0, 10);
-    $uid   = trim($_POST['assigned_staff'] ?? '');
+    $tid       = trim($_POST['task_id'] ?? '');
+    $tname     = trim($_POST['task_name'] ?? '');
+    $tdesc     = trim($_POST['task_description'] ?? '');
+    $raw_sdate = trim($_POST['schedule_date'] ?? '');
+    $sdate     = str_replace('T', ' ', $raw_sdate);
+    if (strlen($sdate) === 16) { $sdate .= ':00'; }
+    $uid       = trim($_POST['assigned_staff'] ?? '');
 
     if ($tid !== '' && $tname !== '' && $sdate !== '' && $uid !== '') {
         $stmt = $pdo->prepare("
@@ -152,6 +156,12 @@ foreach ($pending as $t) {
     else                         { $cnt_pending++; }
 }
 $cnt_completed = count($completed);
+
+function format_sched_display(string $dt): string {
+    $ts = strtotime($dt);
+    if ($ts === false) return $dt;
+    return date('M d, Y h:i A', $ts);
+}
 
 function render_status_dropdown(array $t, string $status_val): void {
     if ($status_val === 'In Progress')      { $btn_cls = 'is-in-progress'; }
@@ -353,20 +363,21 @@ function render_status_dropdown(array $t, string $status_val): void {
         <div class="card-title">Pending Tasks (<?= count($pending) ?>)</div>
         <table class="data-table">
           <thead>
-            <tr><th>NO.</th><th>ID.</th><th>NAME</th><th>DESCRIPTION</th><th>DATE</th><th>STAFF ASSIGNED</th><th>STATUS</th><th>ACTIONS</th></tr>
+            <tr><th>NO.</th><th>ID.</th><th>NAME</th><th>DESCRIPTION</th><th>SCHEDULE TIME</th><th>STAFF ASSIGNED</th><th>STATUS</th><th>ACTIONS</th></tr>
           </thead>
           <tbody>
             <?php foreach ($pending as $i => $t): ?>
               <?php
                 $status_val    = $t['task_status'] ?? 'Pending';
                 $assigned_name = $staff_map[$t['user_id']] ?? $t['user_id'];
+                $dt_for_input  = date('Y-m-d\TH:i', strtotime($t['schedule_date']));
               ?>
               <tr>
                 <td><?= $i + 1 ?></td>
                 <td><?= htmlspecialchars($t['task_id']) ?></td>
                 <td><?= strtoupper(htmlspecialchars($t['task_name'])) ?></td>
                 <td><?= strtoupper(htmlspecialchars($t['task_description'] ?? 'SCHEDULED TASK')) ?></td>
-                <td style="white-space:nowrap;"><?= htmlspecialchars($t['schedule_date']) ?></td>
+                <td style="white-space:nowrap;"><?= htmlspecialchars(format_sched_display($t['schedule_date'])) ?></td>
                 <td><?= htmlspecialchars($assigned_name) ?></td>
                 <td><?php render_status_dropdown($t, $status_val); ?></td>
                 <td>
@@ -375,7 +386,7 @@ function render_status_dropdown(array $t, string $status_val): void {
                       data-id="<?= htmlspecialchars($t['task_id']) ?>"
                       data-name="<?= htmlspecialchars($t['task_name']) ?>"
                       data-desc="<?= htmlspecialchars($t['task_description'] ?? '') ?>"
-                      data-date="<?= htmlspecialchars(substr($t['schedule_date'], 0, 10)) ?>"
+                      data-date="<?= htmlspecialchars($dt_for_input) ?>"
                       data-staff="<?= htmlspecialchars($t['user_id']) ?>"
                       onclick="openEditModal(this)">EDIT</button>
                     <a class="btn btn-sm btn-delete" href="task_schedule.php?delete=<?= urlencode($t['task_id']) ?>" title="Delete" onclick="return confirm('Delete this task?');"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg></a>
@@ -391,7 +402,7 @@ function render_status_dropdown(array $t, string $status_val): void {
         <div class="card-title">Task Completed (<?= count($completed) ?>)</div>
         <table class="data-table">
           <thead>
-            <tr><th>NO.</th><th>ID.</th><th>NAME</th><th>DESCRIPTION</th><th>DATE</th><th>STAFF ASSIGNED</th><th>STATUS</th><th>ACTIONS</th></tr>
+            <tr><th>NO.</th><th>ID.</th><th>NAME</th><th>DESCRIPTION</th><th>SCHEDULE TIME</th><th>STAFF ASSIGNED</th><th>STATUS</th><th>ACTIONS</th></tr>
           </thead>
           <tbody>
             <?php foreach ($completed as $i => $t): ?>
@@ -401,7 +412,7 @@ function render_status_dropdown(array $t, string $status_val): void {
                 <td><?= htmlspecialchars($t['task_id']) ?></td>
                 <td><?= strtoupper(htmlspecialchars($t['task_name'])) ?></td>
                 <td><?= strtoupper(htmlspecialchars($t['task_description'] ?? 'SCHEDULED TASK')) ?></td>
-                <td style="white-space:nowrap;"><?= htmlspecialchars($t['schedule_date']) ?></td>
+                <td style="white-space:nowrap;"><?= htmlspecialchars(format_sched_display($t['schedule_date'])) ?></td>
                 <td><?= htmlspecialchars($assigned_name) ?></td>
                 <td><?php render_status_dropdown($t, 'Completed'); ?></td>
                 <td>
@@ -426,8 +437,8 @@ function render_status_dropdown(array $t, string $status_val): void {
                 <input class="form-control" type="text" name="task_name" id="edit_task_name" required>
               </div>
               <div class="form-group">
-                <label class="form-label">SCHEDULE DATE</label>
-                <input class="form-control" type="date" name="schedule_date" id="edit_schedule_date" required>
+                <label class="form-label">SCHEDULE TIME</label>
+                <input class="form-control" type="datetime-local" name="schedule_date" id="edit_schedule_date" required>
               </div>
             </div>
             <div class="form-grid-2">
@@ -460,7 +471,7 @@ function render_status_dropdown(array $t, string $status_val): void {
         <div class="card-title">Assigned Tasks (<?= count($pending) ?>)</div>
         <table class="data-table">
           <thead>
-            <tr><th>NO.</th><th>ID.</th><th>NAME</th><th>DESCRIPTION</th><th>DATE</th><th>STAFF ASSIGNED</th><th>STATUS</th></tr>
+            <tr><th>NO.</th><th>ID.</th><th>NAME</th><th>DESCRIPTION</th><th>SCHEDULE TIME</th><th>STAFF ASSIGNED</th><th>STATUS</th></tr>
           </thead>
           <tbody>
             <?php if (count($pending) === 0): ?>
@@ -476,7 +487,7 @@ function render_status_dropdown(array $t, string $status_val): void {
                 <td><?= htmlspecialchars($t['task_id']) ?></td>
                 <td><?= strtoupper(htmlspecialchars($t['task_name'])) ?></td>
                 <td><?= strtoupper(htmlspecialchars($t['task_description'] ?? 'SCHEDULED TASK')) ?></td>
-                <td style="white-space:nowrap;"><?= htmlspecialchars($t['schedule_date']) ?></td>
+                <td style="white-space:nowrap;"><?= htmlspecialchars(format_sched_display($t['schedule_date'])) ?></td>
                 <td><?= htmlspecialchars($assigned_name) ?></td>
                 <td><?php render_status_dropdown($t, $status_val); ?></td>
               </tr>
@@ -489,7 +500,7 @@ function render_status_dropdown(array $t, string $status_val): void {
         <div class="card-title">Task Completed (<?= count($completed) ?>)</div>
         <table class="data-table">
           <thead>
-            <tr><th>NO.</th><th>ID.</th><th>NAME</th><th>DESCRIPTION</th><th>DATE</th><th>STAFF ASSIGNED</th><th>STATUS</th></tr>
+            <tr><th>NO.</th><th>ID.</th><th>NAME</th><th>DESCRIPTION</th><th>SCHEDULE TIME</th><th>STAFF ASSIGNED</th><th>STATUS</th></tr>
           </thead>
           <tbody>
             <?php if (count($completed) === 0): ?>
@@ -502,7 +513,7 @@ function render_status_dropdown(array $t, string $status_val): void {
                 <td><?= htmlspecialchars($t['task_id']) ?></td>
                 <td><?= strtoupper(htmlspecialchars($t['task_name'])) ?></td>
                 <td><?= strtoupper(htmlspecialchars($t['task_description'] ?? 'SCHEDULED TASK')) ?></td>
-                <td style="white-space:nowrap;"><?= htmlspecialchars($t['schedule_date']) ?></td>
+                <td style="white-space:nowrap;"><?= htmlspecialchars(format_sched_display($t['schedule_date'])) ?></td>
                 <td><?= htmlspecialchars($assigned_name) ?></td>
                 <td><?php render_status_dropdown($t, 'Completed'); ?></td>
               </tr>
