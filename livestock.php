@@ -5,7 +5,6 @@ if (!isset($_SESSION['user_id'])) { header("Location: login.php"); exit; }
 $full_name = trim(($_SESSION['first_name'] ?? 'Juan') . ' ' . ($_SESSION['last_name'] ?? 'Dela Cruz'));
 $user_id   = $_SESSION['user_id'];
 $role      = strtoupper($_SESSION['user_type'] ?? 'O');
-$business  = trim((string)($_SESSION['business_name'] ?? ''));
 $message   = "";
 $error     = "";
 
@@ -14,13 +13,20 @@ if (isset($_SESSION['flash_message'])) {
     unset($_SESSION['flash_message']);
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_livestock'])) {
+$allowed_health = ['Healthy', 'Sick', 'Recovered', 'Quarantined', 'Deceased'];
+$allowed_vacc   = ['Vaccinated', 'Unvaccinated', 'Partial'];
+
+// 1. Add livestock (Owner only)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_livestock']) && $role === 'O') {
     $animal_type = trim($_POST['animal_type'] ?? '');
     $breed       = trim($_POST['breed'] ?? '');
     $quantity    = (int)($_POST['quantity'] ?? 0);
     $weight      = (float)($_POST['weight'] ?? 0);
     $health      = trim($_POST['health_status'] ?? 'Healthy');
     $vacc_status = trim($_POST['vaccination_status'] ?? 'Vaccinated');
+
+    if (!in_array($health, $allowed_health, true)) { $health = 'Healthy'; }
+    if (!in_array($vacc_status, $allowed_vacc, true)) { $vacc_status = 'Vaccinated'; }
 
     if ($animal_type !== '' && $quantity > 0) {
         $max_num = (int)$pdo->query("SELECT COALESCE(MAX(CAST(SUBSTRING(`livestock_id`, 5) AS UNSIGNED)), 0) FROM `livestock`")->fetchColumn();
@@ -29,7 +35,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_livestock'])) {
         $stmt = $pdo->prepare("
             INSERT INTO `livestock`
             (`livestock_id`, `user_id`, `animal_type`, `breed`, `quantity`, `weight`, `health_status`, `vaccination_status`, `vaccination_date`, `date_recorded`)
-            VALUES (:lid, :uid, :atype, :breed, :qty, :wt, :hs, :vs, CURDATE(), NOW())
+            VALUES (:lid, :uid, :atype, :breed, :qty, :wt, :hs, :vs, :vdate, NOW())
         ");
         $stmt->execute([
             'lid'   => $new_id,
@@ -39,45 +45,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_livestock'])) {
             'qty'   => $quantity,
             'wt'    => $weight,
             'hs'    => $health,
-            'vs'    => $vacc_status
+            'vs'    => $vacc_status,
+            'vdate' => ($vacc_status === 'Vaccinated') ? date('Y-m-d') : null
         ]);
-        $_SESSION['flash_message'] = ($role === 'O') ? "Added {$new_id} to stock." : "Submitted livestock request {$new_id}.";
+        $_SESSION['flash_message'] = "Added {$new_id} to stock.";
         header("Location: livestock.php");
         exit;
+    } else {
+        $error = "Animal type and a quantity of at least 1 are required.";
     }
 }
 
+// 2. Edit core livestock record (Owner only - health & vaccination edited via table dropdowns)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_livestock']) && $role === 'O') {
     $lid         = trim($_POST['livestock_id'] ?? '');
     $animal_type = trim($_POST['animal_type'] ?? '');
     $breed       = trim($_POST['breed'] ?? '');
     $quantity    = (int)($_POST['quantity'] ?? 0);
     $weight      = (float)($_POST['weight'] ?? 0);
-    $health      = trim($_POST['health_status'] ?? 'Healthy');
-    $vacc_status = trim($_POST['vaccination_status'] ?? 'Vaccinated');
 
     if ($lid !== '' && $animal_type !== '' && $quantity > 0) {
         $stmt = $pdo->prepare("
-            UPDATE `livestock` l
-            JOIN `user` u ON l.user_id COLLATE utf8mb4_unicode_ci = u.user_id COLLATE utf8mb4_unicode_ci
-            SET l.`animal_type` = :atype,
-                l.`breed` = :breed,
-                l.`quantity` = :qty,
-                l.`weight` = :wt,
-                l.`health_status` = :hs,
-                l.`vaccination_status` = :vs
-            WHERE l.`livestock_id` = :lid
-              AND LOWER(TRIM(u.business_name)) = LOWER(TRIM(:bname))
+            UPDATE `livestock`
+            SET `animal_type` = :atype,
+                `breed` = :breed,
+                `quantity` = :qty,
+                `weight` = :wt
+            WHERE `livestock_id` = :lid
         ");
         $stmt->execute([
             'atype' => $animal_type,
             'breed' => $breed !== '' ? $breed : 'Native',
             'qty'   => $quantity,
             'wt'    => $weight,
-            'hs'    => $health,
-            'vs'    => $vacc_status,
-            'lid'   => $lid,
-            'bname' => $business
+            'lid'   => $lid
         ]);
         $_SESSION['flash_message'] = "Updated {$lid}.";
         header("Location: livestock.php");
@@ -87,34 +88,126 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_livestock']) && 
     }
 }
 
+// 3. Inline dropdown update for health_status or vaccination_status (Owner & Staff)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_status_field']) && in_array($role, ['O', 'S'], true)) {
+    $lid   = trim($_POST['livestock_id'] ?? '');
+    $field = trim($_POST['field'] ?? '');
+    $val   = trim($_POST['value'] ?? '');
+
+    if ($lid !== '' && $field === 'health_status' && in_array($val, $allowed_health, true)) {
+        $stmt = $pdo->prepare("UPDATE `livestock` SET `health_status` = :val WHERE `livestock_id` = :lid");
+        $stmt->execute(['val' => $val, 'lid' => $lid]);
+        $_SESSION['flash_message'] = "Updated health status for {$lid} to {$val}.";
+    } elseif ($lid !== '' && $field === 'vaccination_status' && in_array($val, $allowed_vacc, true)) {
+        $stmt = $pdo->prepare("
+            UPDATE `livestock`
+            SET `vaccination_status` = :val,
+                `vaccination_date` = CASE
+                    WHEN :val2 = 'Vaccinated' AND `vaccination_date` IS NULL THEN CURDATE()
+                    ELSE `vaccination_date`
+                END
+            WHERE `livestock_id` = :lid
+        ");
+        $stmt->execute(['val' => $val, 'val2' => $val, 'lid' => $lid]);
+        $_SESSION['flash_message'] = "Updated vaccination status for {$lid} to {$val}.";
+    } else {
+        $error = "Invalid status selection.";
+    }
+    header("Location: livestock.php");
+    exit;
+}
+
+// 4. Delete livestock (Owner only)
 if (isset($_GET['delete']) && $role === 'O') {
     $del_id = trim($_GET['delete']);
     if ($del_id !== '') {
-        $stmt = $pdo->prepare("
-            DELETE l FROM `livestock` l
-            JOIN `user` u ON l.user_id COLLATE utf8mb4_unicode_ci = u.user_id COLLATE utf8mb4_unicode_ci
-            WHERE l.`livestock_id` = :lid
-              AND LOWER(TRIM(u.business_name)) = LOWER(TRIM(:bname))
-        ");
-        $stmt->execute([
-            'lid'   => $del_id,
-            'bname' => $business
-        ]);
+        $stmt = $pdo->prepare("DELETE FROM `livestock` WHERE `livestock_id` = :lid");
+        $stmt->execute(['lid' => $del_id]);
         $_SESSION['flash_message'] = "Deleted {$del_id}.";
     }
     header("Location: livestock.php");
     exit;
 }
 
-$rec_stmt = $pdo->prepare("
-    SELECT l.*
-    FROM `livestock` l
-    JOIN `user` u ON l.user_id COLLATE utf8mb4_unicode_ci = u.user_id COLLATE utf8mb4_unicode_ci
-    WHERE LOWER(TRIM(u.business_name)) = LOWER(TRIM(:bname))
-    ORDER BY l.`livestock_id` DESC
-");
-$rec_stmt->execute(['bname' => $business]);
-$records = $rec_stmt->fetchAll();
+$records = $pdo->query("SELECT * FROM `livestock` ORDER BY `livestock_id` DESC")->fetchAll();
+
+function health_tone_class(string $val): string {
+    return match ($val) {
+        'Healthy'     => 'tone-healthy',
+        'Sick'        => 'tone-sick',
+        'Recovered'   => 'tone-recovered',
+        'Quarantined' => 'tone-quarantined',
+        'Deceased'    => 'tone-deceased',
+        default       => 'tone-default',
+    };
+}
+
+function vacc_tone_class(string $val): string {
+    return match ($val) {
+        'Vaccinated'   => 'tone-healthy',
+        'Partial'      => 'tone-yellow',
+        'Unvaccinated' => 'tone-red',
+        default        => 'tone-default',
+    };
+}
+
+function render_health_dropdown(string $lid, string $current_val): void {
+    $btn_tone = health_tone_class($current_val);
+    $options  = [
+        ['Healthy',     'HEALTHY',     health_tone_class('Healthy')],
+        ['Sick',        'SICK',        health_tone_class('Sick')],
+        ['Recovered',   'RECOVERED',   health_tone_class('Recovered')],
+        ['Quarantined', 'QUARANTINED', health_tone_class('Quarantined')],
+        ['Deceased',    'DECEASED',    health_tone_class('Deceased')],
+    ];
+    ?>
+    <div class="status-dd">
+      <button type="button" class="status-dd-btn <?= $btn_tone ?>" onclick="toggleStatusMenu(this)">
+        <span><?= strtoupper(htmlspecialchars($current_val)) ?></span>
+        <span class="status-dd-caret" aria-hidden="true">&#9662;</span>
+      </button>
+      <div class="status-dd-menu">
+        <?php foreach ($options as $o): ?>
+          <form method="POST" action="livestock.php">
+            <input type="hidden" name="livestock_id" value="<?= htmlspecialchars($lid) ?>">
+            <input type="hidden" name="field" value="health_status">
+            <input type="hidden" name="value" value="<?= $o[0] ?>">
+            <input type="hidden" name="update_status_field" value="1">
+            <button type="submit" class="status-dd-opt <?= $o[2] ?>"><?= $o[1] ?></button>
+          </form>
+        <?php endforeach; ?>
+      </div>
+    </div>
+    <?php
+}
+
+function render_vacc_dropdown(string $lid, string $current_val): void {
+    $btn_tone = vacc_tone_class($current_val);
+    $options  = [
+        ['Vaccinated',   'VACCINATED',   vacc_tone_class('Vaccinated')],
+        ['Partial',      'PARTIAL',      vacc_tone_class('Partial')],
+        ['Unvaccinated', 'UNVACCINATED', vacc_tone_class('Unvaccinated')],
+    ];
+    ?>
+    <div class="status-dd">
+      <button type="button" class="status-dd-btn <?= $btn_tone ?>" onclick="toggleStatusMenu(this)">
+        <span><?= strtoupper(htmlspecialchars($current_val)) ?></span>
+        <span class="status-dd-caret" aria-hidden="true">&#9662;</span>
+      </button>
+      <div class="status-dd-menu">
+        <?php foreach ($options as $o): ?>
+          <form method="POST" action="livestock.php">
+            <input type="hidden" name="livestock_id" value="<?= htmlspecialchars($lid) ?>">
+            <input type="hidden" name="field" value="vaccination_status">
+            <input type="hidden" name="value" value="<?= $o[0] ?>">
+            <input type="hidden" name="update_status_field" value="1">
+            <button type="submit" class="status-dd-opt <?= $o[2] ?>"><?= $o[1] ?></button>
+          </form>
+        <?php endforeach; ?>
+      </div>
+    </div>
+    <?php
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -124,6 +217,88 @@ $records = $rec_stmt->fetchAll();
   <title>Livestock - LivestockPro</title>
   <link rel="stylesheet" href="css/style.css">
   <style>
+    /* Compact borderless pill sizing matching task_schedule */
+    .status-dd {
+      display: inline-block;
+      position: relative;
+    }
+    .status-dd-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      min-width: 0;
+      height: auto;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .4px;
+      line-height: 1.2;
+      border: none;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .status-dd-caret {
+      font-size: 9px;
+      line-height: 1;
+      opacity: .85;
+      flex-shrink: 0;
+    }
+    .status-dd-opt {
+      display: block;
+      width: 100%;
+      padding: 6px 12px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .4px;
+      text-align: center;
+      border: none;
+      cursor: pointer;
+    }
+
+    /* Health & Vaccinated bright green pill */
+    .status-dd-btn.tone-healthy,
+    .status-dd-opt.tone-healthy {
+      background: #bff3cd;
+      color: #085c2c;
+    }
+    .status-dd-btn.tone-sick,
+    .status-dd-opt.tone-sick {
+      background: #fad0d0;
+      color: #9c1919;
+    }
+    .status-dd-btn.tone-recovered,
+    .status-dd-opt.tone-recovered {
+      background: #f9e087;
+      color: #7c4400;
+    }
+    .status-dd-btn.tone-quarantined,
+    .status-dd-opt.tone-quarantined {
+      background: #c8defd;
+      color: #0f47a8;
+    }
+    .status-dd-btn.tone-deceased,
+    .status-dd-opt.tone-deceased {
+      background: #cbd5e1;
+      color: #0f172a;
+    }
+    .status-dd-btn.tone-red,
+    .status-dd-opt.tone-red {
+      background: #fad0d0;
+      color: #9c1919;
+    }
+    .status-dd-btn.tone-yellow,
+    .status-dd-opt.tone-yellow {
+      background: #f9e087;
+      color: #7c4400;
+    }
+    .status-dd-btn.tone-default,
+    .status-dd-opt.tone-default {
+      background: #e6ecf5;
+      color: #24344d;
+    }
+
     .modal-backdrop {
       display: none;
       position: fixed;
@@ -236,6 +411,7 @@ $records = $rec_stmt->fetchAll();
         <div class="alert alert-error"><?= htmlspecialchars($error) ?></div>
       <?php endif; ?>
 
+      <?php if ($role === 'O'): ?>
       <div class="card">
         <div class="card-title">Add Livestock</div>
         <form method="POST" action="livestock.php">
@@ -288,11 +464,10 @@ $records = $rec_stmt->fetchAll();
             </div>
           </div>
 
-          <button class="btn btn-primary" type="submit" name="add_livestock">
-            <?= $role === 'O' ? 'ADD TO STOCK' : 'SUBMIT REQUEST' ?>
-          </button>
+          <button class="btn btn-primary" type="submit" name="add_livestock">ADD TO STOCK</button>
         </form>
       </div>
+      <?php endif; ?>
 
       <div class="card">
         <div class="table-header-bar">
@@ -324,26 +499,29 @@ $records = $rec_stmt->fetchAll();
           </thead>
           <tbody>
             <?php foreach ($records as $i => $row): ?>
+              <?php
+                $row_id = (string)$row['livestock_id'];
+                $row_hs = (string)($row['health_status'] ?? 'Healthy');
+                $row_vs = (string)($row['vaccination_status'] ?? 'Vaccinated');
+              ?>
               <tr>
                 <td><?= $i + 1 ?></td>
                 <td><?= strtoupper(htmlspecialchars($row['animal_type'])) ?></td>
                 <td><?= strtoupper(htmlspecialchars($row['breed'])) ?></td>
                 <td><?= number_format((int)$row['quantity']) ?></td>
                 <td><?= number_format((float)$row['weight'], 2) ?></td>
-                <td><span class="badge badge-healthy"><?= strtoupper(htmlspecialchars($row['health_status'])) ?></span></td>
-                <td><?= strtoupper(htmlspecialchars($row['vaccination_status'] ?? 'N/A')) ?></td>
+                <td><?php render_health_dropdown($row_id, $row_hs); ?></td>
+                <td><?php render_vacc_dropdown($row_id, $row_vs); ?></td>
                 <?php if ($role === 'O'): ?>
                   <td>
                     <button type="button" class="btn btn-sm btn-edit"
-                      data-id="<?= htmlspecialchars($row['livestock_id']) ?>"
+                      data-id="<?= htmlspecialchars($row_id) ?>"
                       data-type="<?= htmlspecialchars($row['animal_type']) ?>"
                       data-breed="<?= htmlspecialchars($row['breed']) ?>"
                       data-qty="<?= htmlspecialchars((string)$row['quantity']) ?>"
                       data-weight="<?= htmlspecialchars((string)$row['weight']) ?>"
-                      data-health="<?= htmlspecialchars($row['health_status']) ?>"
-                      data-vacc="<?= htmlspecialchars($row['vaccination_status'] ?? 'Vaccinated') ?>"
                       onclick="openEditLivestockModal(this)">EDIT</button>
-                    <a class="btn btn-sm btn-delete" href="livestock.php?delete=<?= urlencode($row['livestock_id']) ?>" onclick="return confirm('Delete record?')" title="Delete"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg></a>
+                    <a class="btn btn-sm btn-delete" href="livestock.php?delete=<?= urlencode($row_id) ?>" onclick="return confirm('Delete record?')" title="Delete"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg></a>
                   </td>
                 <?php endif; ?>
               </tr>
@@ -378,8 +556,15 @@ $records = $rec_stmt->fetchAll();
         UNVACCINATED: 3
       };
 
+      const getCellSortText = (cell) => {
+        if (!cell) return '';
+        const activeBtnText = cell.querySelector('.status-dd-btn span');
+        if (activeBtnText) return activeBtnText.textContent.trim();
+        return cell.textContent.trim();
+      };
+
       const parseVal = (cell, type) => {
-        const raw = (cell ? cell.textContent : '').trim();
+        const raw = getCellSortText(cell);
         const upper = raw.toUpperCase();
         if (type === 'number') {
           const num = parseFloat(raw.replace(/[^0-9.-]/g, ''));
@@ -455,6 +640,19 @@ $records = $rec_stmt->fetchAll();
         applySort(Number(col), dir, type);
       });
     })();
+
+    function toggleStatusMenu(btn) {
+      const dd = btn.closest('.status-dd');
+      const isOpen = dd.classList.contains('open');
+      document.querySelectorAll('.status-dd.open').forEach(el => el.classList.remove('open'));
+      if (!isOpen) dd.classList.add('open');
+    }
+
+    document.addEventListener('click', function (e) {
+      if (!e.target.closest('.status-dd')) {
+        document.querySelectorAll('.status-dd.open').forEach(el => el.classList.remove('open'));
+      }
+    });
   </script>
 
   <?php if ($role === 'O'): ?>
@@ -487,24 +685,6 @@ $records = $rec_stmt->fetchAll();
             <label class="form-label">WEIGHT (KG)</label>
             <input class="form-control" type="number" step="0.01" name="weight" id="edit_weight" required>
           </div>
-          <div class="form-group">
-            <label class="form-label">HEALTH STATUS</label>
-            <select class="form-control" name="health_status" id="edit_health_status">
-              <option value="Healthy">Healthy</option>
-              <option value="Sick">Sick</option>
-              <option value="Recovered">Recovered</option>
-              <option value="Quarantined">Quarantined</option>
-              <option value="Deceased">Deceased</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label class="form-label">VACCINATION STATUS</label>
-            <select class="form-control" name="vaccination_status" id="edit_vaccination_status">
-              <option value="Vaccinated">Vaccinated</option>
-              <option value="Unvaccinated">Unvaccinated</option>
-              <option value="Partial">Partial</option>
-            </select>
-          </div>
         </div>
         <div class="modal-actions">
           <button class="btn btn-primary" type="submit" name="edit_livestock">SAVE CHANGES</button>
@@ -516,13 +696,11 @@ $records = $rec_stmt->fetchAll();
 
   <script>
     function openEditLivestockModal(btn) {
-      document.getElementById('edit_livestock_id').value       = btn.dataset.id;
-      document.getElementById('edit_animal_type').value       = btn.dataset.type;
-      document.getElementById('edit_breed').value             = btn.dataset.breed;
-      document.getElementById('edit_quantity').value          = btn.dataset.qty;
-      document.getElementById('edit_weight').value            = btn.dataset.weight;
-      document.getElementById('edit_health_status').value     = btn.dataset.health;
-      document.getElementById('edit_vaccination_status').value = btn.dataset.vacc;
+      document.getElementById('edit_livestock_id').value = btn.dataset.id;
+      document.getElementById('edit_animal_type').value = btn.dataset.type;
+      document.getElementById('edit_breed').value       = btn.dataset.breed;
+      document.getElementById('edit_quantity').value    = btn.dataset.qty;
+      document.getElementById('edit_weight').value      = btn.dataset.weight;
       document.getElementById('editLivestockModal').classList.add('open');
     }
 
