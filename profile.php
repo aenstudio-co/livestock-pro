@@ -135,7 +135,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['approve_staff_uid']) 
         $checkStaff->execute(['uid' => $target_uid, 'bname' => $business]);
         if ($checkStaff->fetch()) {
             $hiredDate = date('Y-m-d');
-            $stmt_app = $pdo->prepare("UPDATE `staff` SET `date_hired` = :dhired WHERE `user_id` = :uid");
+            $stmt_app = $pdo->prepare("UPDATE `staff` SET `staff_status` = 'Approved', `date_hired` = :dhired WHERE `user_id` = :uid");
             $stmt_app->bindValue(':dhired', $hiredDate !== '' ? $hiredDate : null, $hiredDate !== '' ? PDO::PARAM_STR : PDO::PARAM_NULL);
             $stmt_app->bindValue(':uid', $target_uid, PDO::PARAM_STR);
             $stmt_app->execute();
@@ -201,7 +201,7 @@ $investment_history = $pdo->query("
 ")->fetchAll();
 
 $staff_rows = $pdo->query("
-    SELECT s.user_id, u.first_name, u.last_name, s.date_hired
+    SELECT s.user_id, u.first_name, u.last_name, s.date_hired, s.staff_status
     FROM `staff` s
     JOIN `user` u ON s.user_id = u.user_id
     ORDER BY s.user_id ASC
@@ -213,13 +213,7 @@ $pending_staff_stmt = $pdo->prepare("
     INNER JOIN `user` u ON s.user_id = u.user_id
     WHERE u.user_type = 'S'
       AND LOWER(TRIM(u.business_name)) = LOWER(TRIM(:bname))
-      AND (
-          s.date_hired IS NULL
-          OR CAST(s.date_hired AS CHAR) = ''
-          OR CAST(s.date_hired AS CHAR) = '1000-01-01'
-          OR CAST(s.date_hired AS CHAR) = '1970-01-01'
-          OR CAST(s.date_hired AS CHAR) = '0000-00-00'
-      )
+      AND LOWER(TRIM(COALESCE(s.staff_status, 'pending'))) = 'pending'
     ORDER BY s.user_id ASC
 ");
 $pending_staff_stmt->execute(['bname' => $business]);
@@ -447,9 +441,9 @@ $pending_staff_rows = $pending_staff_stmt->fetchAll();
                 <tbody>
                   <?php foreach ($staff_rows as $sr): ?>
                     <?php
+                      $stStatus = strtolower(trim((string)($sr['staff_status'] ?? 'pending')));
                       $dhRaw = trim((string)($sr['date_hired'] ?? ''));
-                      $isPendingDate = ($dhRaw === '' || $dhRaw === '1000-01-01' || $dhRaw === '1970-01-01' || $dhRaw === '0000-00-00');
-                      $dhDisplay = (!$isPendingDate && strtotime($dhRaw) !== false)
+                      $dhDisplay = ($stStatus === 'approved' && $dhRaw !== '' && strtotime($dhRaw) !== false)
                           ? date('n/j/Y', strtotime($dhRaw))
                           : 'Pending';
                     ?>
@@ -570,9 +564,9 @@ $pending_staff_rows = $pending_staff_stmt->fetchAll();
                 <tbody>
                   <?php foreach ($staff_rows as $sr): ?>
                     <?php
+                      $stStatus = strtolower(trim((string)($sr['staff_status'] ?? 'pending')));
                       $dhRaw = trim((string)($sr['date_hired'] ?? ''));
-                      $isPendingDate = ($dhRaw === '' || $dhRaw === '1000-01-01' || $dhRaw === '1970-01-01' || $dhRaw === '0000-00-00');
-                      $dhDisplay = (!$isPendingDate && strtotime($dhRaw) !== false)
+                      $dhDisplay = ($stStatus === 'approved' && $dhRaw !== '' && strtotime($dhRaw) !== false)
                           ? date('n/j/Y', strtotime($dhRaw))
                           : 'Pending';
                     ?>

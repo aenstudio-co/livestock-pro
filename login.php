@@ -21,7 +21,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 u.`user_type`,
                 o.`user_id` AS `owner_record_id`,
                 s.`user_id` AS `staff_record_id`,
-                s.`date_hired`
+                s.`date_hired`,
+                s.`staff_status`
             FROM `user` u
             LEFT JOIN `owner` o ON u.`user_id` = o.`user_id`
             LEFT JOIN `staff` s ON u.`user_id` = s.`user_id`
@@ -62,13 +63,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $ownerCheck->execute(['bname' => $businessName]);
                 $hasBusinessOwner = (bool)$ownerCheck->fetchColumn();
 
-                $dateHiredRaw = trim((string)($user['date_hired'] ?? ''));
-                $isApproved = !empty($user['staff_record_id'])
-                    && $dateHiredRaw !== ''
-                    && $dateHiredRaw !== '1000-01-01'
-                    && $dateHiredRaw !== '1970-01-01'
-                    && $dateHiredRaw !== '0000-00-00'
-                    && !str_starts_with($dateHiredRaw, '0000-00-00');
+                // Check directly using the new staff_status column
+                $staffStatus = strtolower(trim((string)($user['staff_status'] ?? 'pending')));
+                $isApproved = !empty($user['staff_record_id']) && $staffStatus === 'approved';
 
                 if (!$isApproved) {
                     $error = "Your staff account is pending approval by the owner of "

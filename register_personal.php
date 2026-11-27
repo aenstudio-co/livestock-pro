@@ -103,8 +103,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'bnum'   => $binfo['bus_ContactNum']
             ]);
         } else {
-            $pdo->prepare("INSERT INTO `staff` (`user_id`, `date_hired`) VALUES (:uid, :dhired)")
-                ->execute(['uid' => $new_user_id, 'dhired' => '1000-01-01']);
+            $pdo->prepare("INSERT INTO `staff` (`user_id`, `date_hired`, `staff_status`) VALUES (:uid, :dhired, :status)")
+                ->execute(['uid' => $new_user_id, 'dhired' => null, 'status' => 'Pending']);
         }
 
         $pdo->exec("SET FOREIGN_KEY_CHECKS = 1");
