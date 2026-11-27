@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Nov 18, 2026 at 01:02 PM
+-- Generation Time: Nov 27, 2026 at 01:23 PM
 -- Server version: 8.0.46
 -- PHP Version: 8.2.12
 
@@ -51,7 +51,8 @@ INSERT INTO `address` (`address_id`, `user_id`, `HouseNumber`, `Street`, `Barang
 ('ADD-00006', 'USE-00006', '19', 'San Jose Street', 'San Isidro', 'Pili', 'Camarines Sur', '4418'),
 ('ADD-00007', 'USE-00007', NULL, 'Zone 5', 'Concepcion Pequeña', 'Naga City', 'Camarines Sur', '4400'),
 ('ADD-00008', 'USE-00008', '87', 'Magsaysay Avenue', 'Balatas', 'Naga City', 'Camarines Sur', '4400'),
-('ADD-00009', 'USE-00009', '205', 'Diversion Road', 'Palestina', 'Pili', 'Camarines Sur', '4418');
+('ADD-00009', 'USE-00009', '205', 'Diversion Road', 'Palestina', 'Pili', 'Camarines Sur', '4418'),
+('ADD-00010', 'USE-00010', 'Blk-16 Lot-3', 'Sitio Yna', 'Bagumbayan', 'City of Ligao', 'Albay', '4504');
 
 -- --------------------------------------------------------
 
@@ -132,7 +133,8 @@ INSERT INTO `expenses` (`expense_id`, `user_id`, `amount`, `category`, `expense_
 ('EXP-00017', 'USE-00006', 8900.00, 'Biosecurity & Sanitation', 'Waste lagoon enzymes and poultry house sanitizers', '2026-07-28 15:10:00'),
 ('EXP-00018', 'USE-00007', 22600.00, 'Feeds & Nutrition', 'Grower hog pellets and dairy carabao concentrates', '2026-08-30 08:20:00'),
 ('EXP-00019', 'USE-00008', 7300.00, 'Transport & Logistics', NULL, '2026-09-24 12:45:00'),
-('EXP-00020', 'USE-00009', 16500.00, 'Veterinary & Medicine', 'Artificial insemination service and pregnancy ultrasound', '2026-10-29 11:05:00');
+('EXP-00020', 'USE-00009', 16500.00, 'Veterinary & Medicine', 'Artificial insemination service and pregnancy ultrasound', '2026-10-29 11:05:00'),
+('EXP-00021', 'USE-00001', 8500.00, 'FEEDS & NUTRITION', NULL, '2026-11-23 18:20:54');
 
 -- --------------------------------------------------------
 
@@ -200,6 +202,21 @@ CREATE TABLE `owner` (
 INSERT INTO `owner` (`user_id`, `address_id`, `bus_started`, `TIN_num`, `bus_ContactNum`) VALUES
 ('USE-00001', 'ADD-00001', '2018-05-10', '114-289-301', '0917-800-20111'),
 ('USE-00002', 'ADD-00002', '2019-09-15', '228-415-609', '0918-900-20222');
+
+-- --------------------------------------------------------
+
+--
+-- Stand-in structure for view `owner_expenses`
+-- (See below for the actual view)
+--
+CREATE TABLE `owner_expenses` (
+`amount` decimal(10,2)
+,`category` varchar(50)
+,`date_recorded` datetime
+,`expense_description` text
+,`expense_id` varchar(45)
+,`user_id` varchar(45)
+);
 
 -- --------------------------------------------------------
 
@@ -283,21 +300,23 @@ INSERT INTO `sales` (`sales_id`, `livestock_id`, `amount`, `quantity_sold`, `dat
 
 CREATE TABLE `staff` (
   `user_id` varchar(45) NOT NULL,
-  `date_hired` date NOT NULL
+  `date_hired` date DEFAULT NULL,
+  `staff_status` enum('Pending','Approved') NOT NULL DEFAULT 'Pending'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
 -- Dumping data for table `staff`
 --
 
-INSERT INTO `staff` (`user_id`, `date_hired`) VALUES
-('USE-00003', '2021-03-01'),
-('USE-00004', '2022-07-15'),
-('USE-00005', '2023-11-02'),
-('USE-00006', '2021-06-10'),
-('USE-00007', '2022-01-20'),
-('USE-00008', '2023-08-14'),
-('USE-00009', '2024-04-01');
+INSERT INTO `staff` (`user_id`, `date_hired`, `staff_status`) VALUES
+('USE-00003', '2021-03-01', 'Approved'),
+('USE-00004', '2022-07-15', 'Approved'),
+('USE-00005', '2023-11-02', 'Approved'),
+('USE-00006', '2021-06-10', 'Approved'),
+('USE-00007', '2022-01-20', 'Approved'),
+('USE-00008', '2023-08-14', 'Approved'),
+('USE-00009', '2024-04-01', 'Approved'),
+('USE-00010', NULL, 'Pending');
 
 -- --------------------------------------------------------
 
@@ -310,7 +329,7 @@ CREATE TABLE `task_schedule` (
   `user_id` varchar(45) NOT NULL,
   `task_name` varchar(100) NOT NULL,
   `task_description` text,
-  `schedule_date` date NOT NULL,
+  `schedule_date` datetime NOT NULL,
   `task_status` varchar(50) NOT NULL
 ) ;
 
@@ -319,26 +338,27 @@ CREATE TABLE `task_schedule` (
 --
 
 INSERT INTO `task_schedule` (`task_id`, `user_id`, `task_name`, `task_description`, `schedule_date`, `task_status`) VALUES
-('TSK-00001', 'USE-00003', 'Morning Cattle & Swine Feeding', 'Distribute grower pellets and check water troughs in Pens 1-6', '2026-11-01', 'Completed'),
-('TSK-00002', 'USE-00004', 'Boer x Native Goat Deworming', 'Administer oral dewormer and record weights for 45 Boer cross goats', '2026-11-02', 'Completed'),
-('TSK-00003', 'USE-00005', 'North Pasture Fence Inspection', 'Check and tighten barbed wire posts along Batangas cattle grazing paddock', '2026-11-03', 'Completed'),
-('TSK-00004', 'USE-00003', 'Landrace x Native Quarantine Check', 'Log morning body temperature and feed intake of isolated swine', '2026-11-04', 'Completed'),
-('TSK-00005', 'USE-00004', 'Piggery Biogas & Lagoon Check', 'Inspect sludge outlet valve and apply biosecurity lime', '2026-11-05', 'Completed'),
-('TSK-00006', 'USE-00005', 'Forage & Silage Chopping', 'Harvest Napier grass from East plot and load into feed mixer', '2026-11-06', 'Cancelled'),
-('TSK-00007', 'USE-00001', 'Monthly Feed & Expense Audit', 'Verify warehouse sack count against October supplier receipts', '2026-11-08', 'Completed'),
-('TSK-00008', 'USE-00003', 'Dadiangas Goat Treatment Follow-up', 'Administer prescribed antibiotic dose to sick native goat batch', '2026-11-10', 'In Progress'),
-('TSK-00009', 'USE-00004', 'Native Goat Vaccination Prep', 'Prepare cold-chain vaccine vials and restraint chute', '2026-11-12', 'Pending'),
-('TSK-00010', 'USE-00005', 'Mid-Month Herd Weighing', 'Weigh Iloilo Native cattle and Philippine Carabao on platform scale', '2026-11-13', 'In Progress'),
-('TSK-00011', 'USE-00006', 'Darag Brooder House Check', 'Verify 32°C heater temperature and electrolyte water lines', '2026-11-01', 'Completed'),
-('TSK-00012', 'USE-00007', 'Murrah Cross Carabao Milking', 'Sanitize milking clusters and transfer milk to bulk cooling tank', '2026-11-02', 'Completed'),
-('TSK-00013', 'USE-00008', 'Pateros Duck Egg Collection', 'Collect morning eggs from 450 Itik ducks and sort by weight', '2026-11-03', 'Completed'),
-('TSK-00014', 'USE-00009', 'Native Pig Pen Sanitation', 'Pressure wash concrete pens and refill disinfectant footbaths', '2026-11-04', 'Completed'),
-('TSK-00015', 'USE-00006', 'Banaba Native Chicken Vaccination', 'Administer Newcastle disease vaccine to 320 native chickens', '2026-11-05', 'Completed'),
-('TSK-00016', 'USE-00007', 'Quezon Native Pig Quarantine Check', NULL, '2026-11-07', 'In Progress'),
-('TSK-00017', 'USE-00008', 'Anglo-Nubian Cross Hoof Trim', 'Inspect and trim hooves of dairy goat herd', '2026-11-09', 'Pending'),
-('TSK-00018', 'USE-00009', 'Muscovy Duck Pond Water Refresh', 'Drain and refill Pato wading basin and clean feeders', '2026-11-11', 'Completed'),
-('TSK-00019', 'USE-00002', 'Buyer Delivery Schedule Review', 'Confirm wholesale native chicken and swine pickup slots for mid-November', '2026-11-12', 'Completed'),
-('TSK-00020', 'USE-00006', 'Weekly Mortality & Egg Log', 'Compile daily Itik egg yield and poultry feed conversion report', '2026-11-13', 'In Progress');
+('TSK-00001', 'USE-00003', 'Morning Cattle & Swine Feeding', 'Distribute grower pellets and check water troughs in Pens 1-6', '2026-11-01 06:30:00', 'Completed'),
+('TSK-00002', 'USE-00004', 'Boer x Native Goat Deworming', 'Administer oral dewormer and record weights for 45 Boer cross goats', '2026-11-02 08:00:00', 'Completed'),
+('TSK-00003', 'USE-00005', 'North Pasture Fence Inspection', 'Check and tighten barbed wire posts along Batangas cattle grazing paddock', '2026-11-03 10:00:00', 'Completed'),
+('TSK-00004', 'USE-00003', 'Landrace x Native Quarantine Check', 'Log morning body temperature and feed intake of isolated swine', '2026-11-04 08:00:00', 'Completed'),
+('TSK-00005', 'USE-00004', 'Piggery Biogas & Lagoon Check', 'Inspect sludge outlet valve and apply biosecurity lime', '2026-11-05 14:00:00', 'Completed'),
+('TSK-00006', 'USE-00005', 'Forage & Silage Chopping', 'Harvest Napier grass from East plot and load into feed mixer', '2026-11-06 16:30:00', 'Cancelled'),
+('TSK-00007', 'USE-00001', 'Monthly Feed & Expense Audit', 'Verify warehouse sack count against October supplier receipts', '2026-11-08 10:00:00', 'Completed'),
+('TSK-00008', 'USE-00003', 'Dadiangas Goat Treatment Follow-up', 'Administer prescribed antibiotic dose to sick native goat batch', '2026-11-10 14:00:00', 'In Progress'),
+('TSK-00009', 'USE-00004', 'Native Goat Vaccination Prep', 'Prepare cold-chain vaccine vials and restraint chute', '2026-11-12 08:00:00', 'Pending'),
+('TSK-00010', 'USE-00005', 'Mid-Month Herd Weighing', 'Weigh Iloilo Native cattle and Philippine Carabao on platform scale', '2026-11-13 14:00:00', 'In Progress'),
+('TSK-00011', 'USE-00006', 'Darag Brooder House Check', 'Verify 32°C heater temperature and electrolyte water lines', '2026-11-01 06:30:00', 'Completed'),
+('TSK-00012', 'USE-00007', 'Murrah Cross Carabao Milking', 'Sanitize milking clusters and transfer milk to bulk cooling tank', '2026-11-02 06:30:00', 'Completed'),
+('TSK-00013', 'USE-00008', 'Pateros Duck Egg Collection', 'Collect morning eggs from 450 Itik ducks and sort by weight', '2026-11-03 06:30:00', 'Completed'),
+('TSK-00014', 'USE-00009', 'Native Pig Pen Sanitation', 'Pressure wash concrete pens and refill disinfectant footbaths', '2026-11-04 08:00:00', 'Completed'),
+('TSK-00015', 'USE-00006', 'Banaba Native Chicken Vaccination', 'Administer Newcastle disease vaccine to 320 native chickens', '2026-11-05 08:00:00', 'Completed'),
+('TSK-00016', 'USE-00007', 'Quezon Native Pig Quarantine Check', NULL, '2026-11-07 10:00:00', 'In Progress'),
+('TSK-00017', 'USE-00008', 'Anglo-Nubian Cross Hoof Trim', 'Inspect and trim hooves of dairy goat herd', '2026-11-09 10:00:00', 'Pending'),
+('TSK-00018', 'USE-00009', 'Muscovy Duck Pond Water Refresh', 'Drain and refill Pato wading basin and clean feeders', '2026-11-11 16:30:00', 'Completed'),
+('TSK-00019', 'USE-00002', 'Buyer Delivery Schedule Review', 'Confirm wholesale native chicken and swine pickup slots for mid-November', '2026-11-12 14:00:00', 'Completed'),
+('TSK-00020', 'USE-00006', 'Weekly Mortality & Egg Log', 'Compile daily Itik egg yield and poultry feed conversion report', '2026-11-13 16:30:00', 'In Progress'),
+('TSK-00021', 'USE-00003', 'Clean Pen', NULL, '2026-11-27 08:00:00', 'Pending');
 
 -- --------------------------------------------------------
 
@@ -374,7 +394,17 @@ INSERT INTO `user` (`user_id`, `business_name`, `first_name`, `last_name`, `emai
 ('USE-00006', 'Bicol Verde Agri Farm', 'Clarisse', 'Vargas', 'clarissevargas@gmail.com', 'Clarisse06', 'G88bh3n4z', '1992-05-30', 'Female', '0922-951-12546', 'ADD-00006', 'S'),
 ('USE-00007', 'Bicol Verde Agri Farm', 'Mikee', 'Quintos', 'mikeequintos@gmail.com', 'Mikeeq07', 'H31ch7d9z', '1993-07-27', 'Female', '0923-149-13017', 'ADD-00007', 'S'),
 ('USE-00008', 'Bicol Verde Agri Farm', 'Raheel', 'Bhyria', 'raheelbhyria@gmail.com', 'Raheel08', 'I34ja8c6z', '1998-09-14', 'Male', '0924-266-13448', 'ADD-00008', 'S'),
-('USE-00009', 'Bicol Verde Agri Farm', 'Winwyn', 'Marquez', 'winwynmarquez@gmail.com', 'Winwyn09', 'J37jo9t3z', '1997-12-05', 'Female', '0925-383-13879', 'ADD-00009', 'S');
+('USE-00009', 'Bicol Verde Agri Farm', 'Winwyn', 'Marquez', 'winwynmarquez@gmail.com', 'Winwyn09', 'J37jo9t3z', '1997-12-05', 'Female', '0925-383-13879', 'ADD-00009', 'S'),
+('USE-00010', 'Bicol Verde Agri Farm', 'Maria', 'Ferrer', 'mariaferrer@gmail.com', 'Maria10', 'mariaF', '1983-07-22', 'Female', '09615758132', 'ADD-00010', 'S');
+
+-- --------------------------------------------------------
+
+--
+-- Structure for view `owner_expenses`
+--
+DROP TABLE IF EXISTS `owner_expenses`;
+
+CREATE ALGORITHM=UNDEFINED DEFINER=`root`@`localhost` SQL SECURITY DEFINER VIEW `owner_expenses`  AS SELECT `expenses`.`expense_id` AS `expense_id`, `expenses`.`user_id` AS `user_id`, `expenses`.`category` AS `category`, `expenses`.`expense_description` AS `expense_description`, `expenses`.`amount` AS `amount`, `expenses`.`date_recorded` AS `date_recorded` FROM `expenses` WHERE (`expenses`.`user_id` = 'USE-00001') ;
 
 --
 -- Indexes for dumped tables
