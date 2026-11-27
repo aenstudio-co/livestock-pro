@@ -2,7 +2,7 @@
 $host = "localhost";
 $dbname = "livestock_db";
 $username = "root";
-$password = "belinDa@2005";
+$password = "";
 
 try {
     $pdo = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8mb4", $username, $password);
