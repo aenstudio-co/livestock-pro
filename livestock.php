@@ -5,6 +5,7 @@ if (!isset($_SESSION['user_id'])) { header("Location: login.php"); exit; }
 $full_name = trim(($_SESSION['first_name'] ?? 'Juan') . ' ' . ($_SESSION['last_name'] ?? 'Dela Cruz'));
 $user_id   = $_SESSION['user_id'];
 $role      = strtoupper($_SESSION['user_type'] ?? 'O');
+$business  = trim((string)($_SESSION['business_name'] ?? ''));
 $message   = "";
 $error     = "";
 
@@ -57,14 +58,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_livestock']) && 
 
     if ($lid !== '' && $animal_type !== '' && $quantity > 0) {
         $stmt = $pdo->prepare("
-            UPDATE `livestock`
-            SET `animal_type` = :atype,
-                `breed` = :breed,
-                `quantity` = :qty,
-                `weight` = :wt,
-                `health_status` = :hs,
-                `vaccination_status` = :vs
-            WHERE `livestock_id` = :lid
+            UPDATE `livestock` l
+            JOIN `user` u ON l.user_id COLLATE utf8mb4_unicode_ci = u.user_id COLLATE utf8mb4_unicode_ci
+            SET l.`animal_type` = :atype,
+                l.`breed` = :breed,
+                l.`quantity` = :qty,
+                l.`weight` = :wt,
+                l.`health_status` = :hs,
+                l.`vaccination_status` = :vs
+            WHERE l.`livestock_id` = :lid
+              AND LOWER(TRIM(u.business_name)) = LOWER(TRIM(:bname))
         ");
         $stmt->execute([
             'atype' => $animal_type,
@@ -73,7 +76,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_livestock']) && 
             'wt'    => $weight,
             'hs'    => $health,
             'vs'    => $vacc_status,
-            'lid'   => $lid
+            'lid'   => $lid,
+            'bname' => $business
         ]);
         $_SESSION['flash_message'] = "Updated {$lid}.";
         header("Location: livestock.php");
@@ -86,15 +90,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_livestock']) && 
 if (isset($_GET['delete']) && $role === 'O') {
     $del_id = trim($_GET['delete']);
     if ($del_id !== '') {
-        $stmt = $pdo->prepare("DELETE FROM `livestock` WHERE `livestock_id` = :lid");
-        $stmt->execute(['lid' => $del_id]);
+        $stmt = $pdo->prepare("
+            DELETE l FROM `livestock` l
+            JOIN `user` u ON l.user_id COLLATE utf8mb4_unicode_ci = u.user_id COLLATE utf8mb4_unicode_ci
+            WHERE l.`livestock_id` = :lid
+              AND LOWER(TRIM(u.business_name)) = LOWER(TRIM(:bname))
+        ");
+        $stmt->execute([
+            'lid'   => $del_id,
+            'bname' => $business
+        ]);
         $_SESSION['flash_message'] = "Deleted {$del_id}.";
     }
     header("Location: livestock.php");
     exit;
 }
 
-$records = $pdo->query("SELECT * FROM `livestock` ORDER BY `livestock_id` DESC")->fetchAll();
+$rec_stmt = $pdo->prepare("
+    SELECT l.*
+    FROM `livestock` l
+    JOIN `user` u ON l.user_id COLLATE utf8mb4_unicode_ci = u.user_id COLLATE utf8mb4_unicode_ci
+    WHERE LOWER(TRIM(u.business_name)) = LOWER(TRIM(:bname))
+    ORDER BY l.`livestock_id` DESC
+");
+$rec_stmt->execute(['bname' => $business]);
+$records = $rec_stmt->fetchAll();
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -240,7 +260,7 @@ $records = $pdo->query("SELECT * FROM `livestock` ORDER BY `livestock_id` DESC")
         <table class="data-table">
           <thead>
             <tr>
-              <th>NO.</th><th>ID.</th><th>TYPE</th><th>BREED</th><th>QUANTITY</th><th>WEIGHT (KG)</th><th>HEALTH</th><th>VACCINATION</th>
+              <th>NO.</th><th>TYPE</th><th>BREED</th><th>QUANTITY</th><th>WEIGHT (KG)</th><th>HEALTH</th><th>VACCINATION</th>
               <?php if ($role === 'O'): ?><th>ACTIONS</th><?php endif; ?>
             </tr>
           </thead>
@@ -248,7 +268,6 @@ $records = $pdo->query("SELECT * FROM `livestock` ORDER BY `livestock_id` DESC")
             <?php foreach ($records as $i => $row): ?>
               <tr>
                 <td><?= $i + 1 ?></td>
-                <td><?= htmlspecialchars($row['livestock_id']) ?></td>
                 <td><?= strtoupper(htmlspecialchars($row['animal_type'])) ?></td>
                 <td><?= strtoupper(htmlspecialchars($row['breed'])) ?></td>
                 <td><?= number_format((int)$row['quantity']) ?></td>

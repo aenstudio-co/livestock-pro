@@ -2,17 +2,52 @@
 require_once 'includes/db_connect.php';
 if (!isset($_SESSION['user_id'])) { header("Location: login.php"); exit; }
 
-$full_name = trim(($_SESSION['first_name'] ?? 'Juan') . ' ' . ($_SESSION['last_name'] ?? 'Dela Cruz'));
-$user_id   = $_SESSION['user_id'];
-$role      = strtoupper($_SESSION['user_type'] ?? 'O');
-$business  = strtoupper($_SESSION['business_name'] ?? 'BUSINESS NAME OWNER');
+$full_name    = trim(($_SESSION['first_name'] ?? 'Juan') . ' ' . ($_SESSION['last_name'] ?? 'Dela Cruz'));
+$user_id      = $_SESSION['user_id'];
+$role         = strtoupper($_SESSION['user_type'] ?? 'O');
+$business_raw = trim((string)($_SESSION['business_name'] ?? ''));
+$business     = strtoupper($business_raw !== '' ? $business_raw : 'BUSINESS NAME OWNER');
 
-$total_livestock = (int)$pdo->query("SELECT COALESCE(SUM(quantity), 0) FROM `livestock`")->fetchColumn();
-$total_expenses  = (float)$pdo->query("SELECT COALESCE(SUM(amount), 0) FROM `expenses`")->fetchColumn();
-$total_income    = (float)$pdo->query("SELECT COALESCE(SUM(amount), 0) FROM `sales`")->fetchColumn();
-$profit          = $total_income - $total_expenses;
+$liv_stmt = $pdo->prepare("
+    SELECT COALESCE(SUM(l.quantity), 0)
+    FROM `livestock` l
+    JOIN `user` u ON l.user_id COLLATE utf8mb4_unicode_ci = u.user_id COLLATE utf8mb4_unicode_ci
+    WHERE LOWER(TRIM(u.business_name)) = LOWER(TRIM(:bname))
+");
+$liv_stmt->execute(['bname' => $business_raw]);
+$total_livestock = (int)$liv_stmt->fetchColumn();
 
-$tasks = $pdo->query("SELECT task_id, task_name, task_description, schedule_date FROM `task_schedule` ORDER BY schedule_date ASC LIMIT 5")->fetchAll();
+$exp_stmt = $pdo->prepare("
+    SELECT COALESCE(SUM(e.amount), 0)
+    FROM `expenses` e
+    JOIN `user` u ON e.user_id COLLATE utf8mb4_unicode_ci = u.user_id COLLATE utf8mb4_unicode_ci
+    WHERE LOWER(TRIM(u.business_name)) = LOWER(TRIM(:bname))
+");
+$exp_stmt->execute(['bname' => $business_raw]);
+$total_expenses = (float)$exp_stmt->fetchColumn();
+
+$inc_stmt = $pdo->prepare("
+    SELECT COALESCE(SUM(s.amount), 0)
+    FROM `sales` s
+    JOIN `livestock` l ON s.livestock_id COLLATE utf8mb4_unicode_ci = l.livestock_id COLLATE utf8mb4_unicode_ci
+    JOIN `user` u ON l.user_id COLLATE utf8mb4_unicode_ci = u.user_id COLLATE utf8mb4_unicode_ci
+    WHERE LOWER(TRIM(u.business_name)) = LOWER(TRIM(:bname))
+");
+$inc_stmt->execute(['bname' => $business_raw]);
+$total_income = (float)$inc_stmt->fetchColumn();
+
+$profit = $total_income - $total_expenses;
+
+$tsk_stmt = $pdo->prepare("
+    SELECT ts.task_id, ts.task_name, ts.task_description, ts.schedule_date
+    FROM `task_schedule` ts
+    JOIN `user` u ON ts.user_id COLLATE utf8mb4_unicode_ci = u.user_id COLLATE utf8mb4_unicode_ci
+    WHERE LOWER(TRIM(u.business_name)) = LOWER(TRIM(:bname))
+    ORDER BY ts.schedule_date ASC
+    LIMIT 5
+");
+$tsk_stmt->execute(['bname' => $business_raw]);
+$tasks = $tsk_stmt->fetchAll();
 ?>
 <!DOCTYPE html>
 <html lang="en">

@@ -4,17 +4,59 @@ if (!isset($_SESSION['user_id'])) { header("Location: login.php"); exit; }
 
 $full_name = trim(($_SESSION['first_name'] ?? 'Juan') . ' ' . ($_SESSION['last_name'] ?? 'Dela Cruz'));
 $user_id   = $_SESSION['user_id'];
+$business  = trim((string)($_SESSION['business_name'] ?? ''));
 
-$total_livestock = (int)$pdo->query("SELECT COALESCE(SUM(quantity), 0) FROM `livestock`")->fetchColumn();
-$total_expenses  = (float)$pdo->query("SELECT COALESCE(SUM(amount), 0) FROM `expenses`")->fetchColumn();
-$total_income    = (float)$pdo->query("SELECT COALESCE(SUM(amount), 0) FROM `sales`")->fetchColumn();
-$profit          = $total_income - $total_expenses;
-$roi             = ($total_expenses > 0) ? (($total_income - $total_expenses) / $total_expenses) * 100 : 0;
+$liv_stmt = $pdo->prepare("
+    SELECT COALESCE(SUM(l.quantity), 0)
+    FROM `livestock` l
+    JOIN `user` u ON l.user_id COLLATE utf8mb4_unicode_ci = u.user_id COLLATE utf8mb4_unicode_ci
+    WHERE LOWER(TRIM(u.business_name)) = LOWER(TRIM(:bname))
+");
+$liv_stmt->execute(['bname' => $business]);
+$total_livestock = (int)$liv_stmt->fetchColumn();
 
-$exp_count = (int)$pdo->query("SELECT COUNT(*) FROM `expenses`")->fetchColumn();
-$sls_count = (int)$pdo->query("SELECT COUNT(*) FROM `sales`")->fetchColumn();
+$exp_stmt = $pdo->prepare("
+    SELECT COALESCE(SUM(e.amount), 0)
+    FROM `expenses` e
+    JOIN `user` u ON e.user_id COLLATE utf8mb4_unicode_ci = u.user_id COLLATE utf8mb4_unicode_ci
+    WHERE LOWER(TRIM(u.business_name)) = LOWER(TRIM(:bname))
+");
+$exp_stmt->execute(['bname' => $business]);
+$total_expenses = (float)$exp_stmt->fetchColumn();
 
-$sales_by_item = $pdo->query("
+$inc_stmt = $pdo->prepare("
+    SELECT COALESCE(SUM(s.amount), 0)
+    FROM `sales` s
+    JOIN `livestock` l ON s.livestock_id COLLATE utf8mb4_unicode_ci = l.livestock_id COLLATE utf8mb4_unicode_ci
+    JOIN `user` u ON l.user_id COLLATE utf8mb4_unicode_ci = u.user_id COLLATE utf8mb4_unicode_ci
+    WHERE LOWER(TRIM(u.business_name)) = LOWER(TRIM(:bname))
+");
+$inc_stmt->execute(['bname' => $business]);
+$total_income = (float)$inc_stmt->fetchColumn();
+
+$profit = $total_income - $total_expenses;
+$roi    = ($total_expenses > 0) ? (($total_income - $total_expenses) / $total_expenses) * 100 : 0;
+
+$exp_cnt_stmt = $pdo->prepare("
+    SELECT COUNT(*)
+    FROM `expenses` e
+    JOIN `user` u ON e.user_id COLLATE utf8mb4_unicode_ci = u.user_id COLLATE utf8mb4_unicode_ci
+    WHERE LOWER(TRIM(u.business_name)) = LOWER(TRIM(:bname))
+");
+$exp_cnt_stmt->execute(['bname' => $business]);
+$exp_count = (int)$exp_cnt_stmt->fetchColumn();
+
+$sls_cnt_stmt = $pdo->prepare("
+    SELECT COUNT(*)
+    FROM `sales` s
+    JOIN `livestock` l ON s.livestock_id COLLATE utf8mb4_unicode_ci = l.livestock_id COLLATE utf8mb4_unicode_ci
+    JOIN `user` u ON l.user_id COLLATE utf8mb4_unicode_ci = u.user_id COLLATE utf8mb4_unicode_ci
+    WHERE LOWER(TRIM(u.business_name)) = LOWER(TRIM(:bname))
+");
+$sls_cnt_stmt->execute(['bname' => $business]);
+$sls_count = (int)$sls_cnt_stmt->fetchColumn();
+
+$sbi_stmt = $pdo->prepare("
     SELECT
         COALESCE(l.breed, l.animal_type, 'LIVESTOCK') AS item_name,
         COALESCE(SUM(s.quantity_sold), 0) AS total_qty,
@@ -23,25 +65,37 @@ $sales_by_item = $pdo->query("
              THEN COALESCE(SUM(s.amount), 0) / SUM(s.quantity_sold)
              ELSE 0 END AS avg_price
     FROM `sales` s
-    LEFT JOIN `livestock` l ON s.livestock_id = l.livestock_id
+    JOIN `livestock` l ON s.livestock_id COLLATE utf8mb4_unicode_ci = l.livestock_id COLLATE utf8mb4_unicode_ci
+    JOIN `user` u ON l.user_id COLLATE utf8mb4_unicode_ci = u.user_id COLLATE utf8mb4_unicode_ci
+    WHERE LOWER(TRIM(u.business_name)) = LOWER(TRIM(:bname))
     GROUP BY l.livestock_id, l.breed, l.animal_type
     ORDER BY total_amt DESC
     LIMIT 6
-")->fetchAll();
+");
+$sbi_stmt->execute(['bname' => $business]);
+$sales_by_item = $sbi_stmt->fetchAll();
 
-$by_type = $pdo->query("
-    SELECT animal_type, COALESCE(SUM(quantity), 0) AS qty
-    FROM `livestock`
-    GROUP BY animal_type
+$bt_stmt = $pdo->prepare("
+    SELECT l.animal_type, COALESCE(SUM(l.quantity), 0) AS qty
+    FROM `livestock` l
+    JOIN `user` u ON l.user_id COLLATE utf8mb4_unicode_ci = u.user_id COLLATE utf8mb4_unicode_ci
+    WHERE LOWER(TRIM(u.business_name)) = LOWER(TRIM(:bname))
+    GROUP BY l.animal_type
     ORDER BY qty DESC
-")->fetchAll();
+");
+$bt_stmt->execute(['bname' => $business]);
+$by_type = $bt_stmt->fetchAll();
 
-$by_exp_cat = $pdo->query("
-    SELECT category, COUNT(*) AS cnt, COALESCE(SUM(amount), 0) AS total_amt
-    FROM `expenses`
-    GROUP BY category
+$bec_stmt = $pdo->prepare("
+    SELECT e.category, COUNT(*) AS cnt, COALESCE(SUM(e.amount), 0) AS total_amt
+    FROM `expenses` e
+    JOIN `user` u ON e.user_id COLLATE utf8mb4_unicode_ci = u.user_id COLLATE utf8mb4_unicode_ci
+    WHERE LOWER(TRIM(u.business_name)) = LOWER(TRIM(:bname))
+    GROUP BY e.category
     ORDER BY total_amt DESC
-")->fetchAll();
+");
+$bec_stmt->execute(['bname' => $business]);
+$by_exp_cat = $bec_stmt->fetchAll();
 ?>
 <!DOCTYPE html>
 <html lang="en">

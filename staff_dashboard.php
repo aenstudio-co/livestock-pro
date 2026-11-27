@@ -2,11 +2,19 @@
 require_once 'includes/db_connect.php';
 if (!isset($_SESSION['user_id'])) { header("Location: login.php"); exit; }
 
-$full_name = trim(($_SESSION['first_name'] ?? 'Maria') . ' ' . ($_SESSION['last_name'] ?? 'Clara'));
-$user_id   = $_SESSION['user_id'];
-$business  = strtoupper($_SESSION['business_name'] ?? 'BUSINESS NAME STAFF');
+$full_name    = trim(($_SESSION['first_name'] ?? 'Maria') . ' ' . ($_SESSION['last_name'] ?? 'Clara'));
+$user_id      = $_SESSION['user_id'];
+$business_raw = trim((string)($_SESSION['business_name'] ?? ''));
+$business     = strtoupper($business_raw !== '' ? $business_raw : 'BUSINESS NAME STAFF');
 
-$total_livestock = (int)$pdo->query("SELECT COALESCE(SUM(quantity), 0) FROM `livestock`")->fetchColumn();
+$liv_stmt = $pdo->prepare("
+    SELECT COALESCE(SUM(l.quantity), 0)
+    FROM `livestock` l
+    JOIN `user` u ON l.user_id COLLATE utf8mb4_unicode_ci = u.user_id COLLATE utf8mb4_unicode_ci
+    WHERE LOWER(TRIM(u.business_name)) = LOWER(TRIM(:bname))
+");
+$liv_stmt->execute(['bname' => $business_raw]);
+$total_livestock = (int)$liv_stmt->fetchColumn();
 
 $stmt_p = $pdo->prepare("SELECT COUNT(*) FROM `task_schedule` WHERE `user_id` = :uid AND `task_status` = 'Pending'");
 $stmt_p->execute(['uid' => $user_id]);

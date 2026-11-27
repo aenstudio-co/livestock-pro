@@ -6,6 +6,7 @@ $full_name = trim(($_SESSION['first_name'] ?? '') . ' ' . ($_SESSION['last_name'
 if ($full_name === '') { $full_name = 'User'; }
 $user_id   = $_SESSION['user_id'];
 $role      = strtoupper($_SESSION['user_type'] ?? 'O');
+$business  = trim((string)($_SESSION['business_name'] ?? ''));
 $message   = "";
 $error     = "";
 
@@ -46,16 +47,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_expense']) && $r
 
     if ($eid !== '' && $name !== '' && $amount > 0) {
         $pdo->prepare("
-            UPDATE `expenses`
-            SET `category` = :cat,
-                `amount` = :amt,
-                `expense_description` = :desc
-            WHERE `expense_id` = :eid
+            UPDATE `expenses` e
+            JOIN `user` u ON e.user_id COLLATE utf8mb4_unicode_ci = u.user_id COLLATE utf8mb4_unicode_ci
+            SET e.`category` = :cat,
+                e.`amount` = :amt,
+                e.`expense_description` = :desc
+            WHERE e.`expense_id` = :eid
+              AND LOWER(TRIM(u.business_name)) = LOWER(TRIM(:bname))
         ")->execute([
-            'cat'  => $name,
-            'amt'  => $amount,
-            'desc' => $notes !== '' ? $notes : null,
-            'eid'  => $eid
+            'cat'   => $name,
+            'amt'   => $amount,
+            'desc'  => $notes !== '' ? $notes : null,
+            'eid'   => $eid,
+            'bname' => $business
         ]);
         $_SESSION['flash_message'] = "Updated {$eid}.";
         header("Location: expenses.php");
@@ -66,20 +70,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_expense']) && $r
 }
 
 if (isset($_GET['delete']) && $role === 'O') {
-    $pdo->prepare("DELETE FROM `expenses` WHERE `expense_id` = :eid")->execute(['eid' => $_GET['delete']]);
+    $pdo->prepare("
+        DELETE e FROM `expenses` e
+        JOIN `user` u ON e.user_id COLLATE utf8mb4_unicode_ci = u.user_id COLLATE utf8mb4_unicode_ci
+        WHERE e.`expense_id` = :eid
+          AND LOWER(TRIM(u.business_name)) = LOWER(TRIM(:bname))
+    ")->execute([
+        'eid'   => $_GET['delete'],
+        'bname' => $business
+    ]);
     header("Location: expenses.php");
     exit;
 }
 
-$total_expenses = (float)$pdo->query("SELECT COALESCE(SUM(amount), 0) FROM `expenses`")->fetchColumn();
-$records        = $pdo->query("SELECT * FROM `expenses` ORDER BY `expense_id` DESC")->fetchAll();
-$by_exp_cat     = $pdo->query("
-    SELECT category, COALESCE(SUM(amount), 0) AS total_amt
-    FROM `expenses`
-    GROUP BY category
+$tot_stmt = $pdo->prepare("
+    SELECT COALESCE(SUM(e.amount), 0)
+    FROM `expenses` e
+    JOIN `user` u ON e.user_id COLLATE utf8mb4_unicode_ci = u.user_id COLLATE utf8mb4_unicode_ci
+    WHERE LOWER(TRIM(u.business_name)) = LOWER(TRIM(:bname))
+");
+$tot_stmt->execute(['bname' => $business]);
+$total_expenses = (float)$tot_stmt->fetchColumn();
+
+$rec_stmt = $pdo->prepare("
+    SELECT e.*
+    FROM `expenses` e
+    JOIN `user` u ON e.user_id COLLATE utf8mb4_unicode_ci = u.user_id COLLATE utf8mb4_unicode_ci
+    WHERE LOWER(TRIM(u.business_name)) = LOWER(TRIM(:bname))
+    ORDER BY e.`expense_id` DESC
+");
+$rec_stmt->execute(['bname' => $business]);
+$records = $rec_stmt->fetchAll();
+
+$cat_stmt = $pdo->prepare("
+    SELECT e.category, COALESCE(SUM(e.amount), 0) AS total_amt
+    FROM `expenses` e
+    JOIN `user` u ON e.user_id COLLATE utf8mb4_unicode_ci = u.user_id COLLATE utf8mb4_unicode_ci
+    WHERE LOWER(TRIM(u.business_name)) = LOWER(TRIM(:bname))
+    GROUP BY e.category
     ORDER BY total_amt DESC
     LIMIT 7
-")->fetchAll();
+");
+$cat_stmt->execute(['bname' => $business]);
+$by_exp_cat = $cat_stmt->fetchAll();
+
 $max_exp_bar = 1;
 foreach ($by_exp_cat as $c) {
     if ((float)$c['total_amt'] > $max_exp_bar) {
@@ -226,7 +260,7 @@ foreach ($by_exp_cat as $c) {
         <table class="data-table">
           <thead>
             <tr>
-              <th>NO.</th><th>ID.</th><th>NAME</th><th>AMOUNT</th><th>DATE</th><th>NOTES</th>
+              <th>NO.</th><th>NAME</th><th>AMOUNT</th><th>DATE</th><th>NOTES</th>
               <?php if ($role === 'O'): ?><th>ACTIONS</th><?php endif; ?>
             </tr>
           </thead>
@@ -234,7 +268,6 @@ foreach ($by_exp_cat as $c) {
             <?php foreach ($records as $i => $r): ?>
               <tr>
                 <td><?= $i + 1 ?></td>
-                <td><?= htmlspecialchars($r['expense_id']) ?></td>
                 <td><?= strtoupper(htmlspecialchars($r['category'])) ?></td>
                 <td>&#8369;<?= number_format((float)$r['amount'], 0) ?></td>
                 <td style="white-space:nowrap;"><?= htmlspecialchars(substr($r['date_recorded'], 0, 10)) ?></td>

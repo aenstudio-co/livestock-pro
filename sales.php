@@ -6,6 +6,7 @@ $full_name = trim(($_SESSION['first_name'] ?? '') . ' ' . ($_SESSION['last_name'
 if ($full_name === '') { $full_name = 'User'; }
 $user_id   = $_SESSION['user_id'];
 $role      = strtoupper($_SESSION['user_type'] ?? 'O');
+$business  = trim((string)($_SESSION['business_name'] ?? ''));
 $message   = "";
 $error     = "";
 
@@ -14,7 +15,15 @@ if (isset($_SESSION['flash_message'])) {
     unset($_SESSION['flash_message']);
 }
 
-$livestock_list = $pdo->query("SELECT livestock_id, animal_type, breed FROM `livestock` ORDER BY livestock_id ASC")->fetchAll();
+$lv_stmt = $pdo->prepare("
+    SELECT l.livestock_id, l.animal_type, l.breed
+    FROM `livestock` l
+    JOIN `user` u ON l.user_id COLLATE utf8mb4_unicode_ci = u.user_id COLLATE utf8mb4_unicode_ci
+    WHERE LOWER(TRIM(u.business_name)) = LOWER(TRIM(:bname))
+    ORDER BY l.livestock_id ASC
+");
+$lv_stmt->execute(['bname' => $business]);
+$livestock_list = $lv_stmt->fetchAll();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_sale']) && $role === 'O') {
     $lid       = trim($_POST['livestock_id'] ?? '');
@@ -80,24 +89,41 @@ if (isset($_GET['delete']) && $role === 'O') {
     exit;
 }
 
-$total_sales = (float)$pdo->query("SELECT COALESCE(SUM(amount), 0) FROM `sales`")->fetchColumn();
-$records     = $pdo->query("
+$tot_stmt = $pdo->prepare("
+    SELECT COALESCE(SUM(s.amount), 0)
+    FROM `sales` s
+    JOIN `livestock` l ON s.livestock_id COLLATE utf8mb4_unicode_ci = l.livestock_id COLLATE utf8mb4_unicode_ci
+    JOIN `user` u ON l.user_id COLLATE utf8mb4_unicode_ci = u.user_id COLLATE utf8mb4_unicode_ci
+    WHERE LOWER(TRIM(u.business_name)) = LOWER(TRIM(:bname))
+");
+$tot_stmt->execute(['bname' => $business]);
+$total_sales = (float)$tot_stmt->fetchColumn();
+
+$rec_stmt = $pdo->prepare("
     SELECT s.*, l.animal_type
     FROM `sales` s
-    LEFT JOIN `livestock` l ON s.livestock_id = l.livestock_id
+    JOIN `livestock` l ON s.livestock_id COLLATE utf8mb4_unicode_ci = l.livestock_id COLLATE utf8mb4_unicode_ci
+    JOIN `user` u ON l.user_id COLLATE utf8mb4_unicode_ci = u.user_id COLLATE utf8mb4_unicode_ci
+    WHERE LOWER(TRIM(u.business_name)) = LOWER(TRIM(:bname))
     ORDER BY s.sales_id DESC
-")->fetchAll();
+");
+$rec_stmt->execute(['bname' => $business]);
+$records = $rec_stmt->fetchAll();
 
-$sales_by_item = $pdo->query("
+$sbi_stmt = $pdo->prepare("
     SELECT
         COALESCE(l.animal_type, s.livestock_id, 'LIVESTOCK') AS item_label,
         COALESCE(SUM(s.amount), 0) AS total_amt
     FROM `sales` s
-    LEFT JOIN `livestock` l ON s.livestock_id = l.livestock_id
+    JOIN `livestock` l ON s.livestock_id COLLATE utf8mb4_unicode_ci = l.livestock_id COLLATE utf8mb4_unicode_ci
+    JOIN `user` u ON l.user_id COLLATE utf8mb4_unicode_ci = u.user_id COLLATE utf8mb4_unicode_ci
+    WHERE LOWER(TRIM(u.business_name)) = LOWER(TRIM(:bname))
     GROUP BY COALESCE(l.animal_type, s.livestock_id, 'LIVESTOCK')
     ORDER BY total_amt DESC
     LIMIT 7
-")->fetchAll();
+");
+$sbi_stmt->execute(['bname' => $business]);
+$sales_by_item = $sbi_stmt->fetchAll();
 
 $max_sale_bar = 1;
 foreach ($sales_by_item as $sb) {
@@ -199,7 +225,7 @@ foreach ($sales_by_item as $sb) {
                     <option value="">Select Livestock</option>
                     <?php foreach ($livestock_list as $lv): ?>
                       <option value="<?= htmlspecialchars($lv['livestock_id']) ?>">
-                        <?= htmlspecialchars($lv['livestock_id'] . ' - ' . $lv['animal_type'] . ' (' . $lv['breed'] . ')') ?>
+                        <?= htmlspecialchars($lv['animal_type'] . ' (' . $lv['breed'] . ')') ?>
                       </option>
                     <?php endforeach; ?>
                   </select>
@@ -260,7 +286,7 @@ foreach ($sales_by_item as $sb) {
         <table class="data-table">
           <thead>
             <tr>
-              <th>NO.</th><th>ID.</th><th>LIVESTOCK SOLD</th><th>ID</th><th>QUANTITY</th><th>AMOUNT</th><th>DATE</th>
+              <th>NO.</th><th>LIVESTOCK SOLD</th><th>QUANTITY</th><th>AMOUNT</th><th>DATE</th>
               <?php if ($role === 'O'): ?><th>ACTIONS</th><?php endif; ?>
             </tr>
           </thead>
@@ -268,9 +294,7 @@ foreach ($sales_by_item as $sb) {
             <?php foreach ($records as $i => $r): ?>
               <tr>
                 <td><?= $i + 1 ?></td>
-                <td><?= htmlspecialchars($r['sales_id']) ?></td>
                 <td><?= strtoupper(htmlspecialchars($r['animal_type'] ?? 'LIVESTOCK')) ?></td>
-                <td><?= htmlspecialchars($r['livestock_id']) ?></td>
                 <td><?= (int)$r['quantity_sold'] ?></td>
                 <td>&#8369;<?= number_format((float)$r['amount'], 0) ?></td>
                 <td style="white-space:nowrap;"><?= htmlspecialchars($r['date_sold']) ?></td>
@@ -306,7 +330,7 @@ foreach ($sales_by_item as $sb) {
             <select class="form-control" name="livestock_id" id="edit_sale_livestock_id" required>
               <?php foreach ($livestock_list as $lv): ?>
                 <option value="<?= htmlspecialchars($lv['livestock_id']) ?>">
-                  <?= htmlspecialchars($lv['livestock_id'] . ' - ' . $lv['animal_type'] . ' (' . $lv['breed'] . ')') ?>
+                  <?= htmlspecialchars($lv['animal_type'] . ' (' . $lv['breed'] . ')') ?>
                 </option>
               <?php endforeach; ?>
             </select>
