@@ -16,7 +16,7 @@ if (isset($_SESSION['flash_message'])) {
 }
 
 $lv_stmt = $pdo->prepare("
-    SELECT l.livestock_id, l.animal_type, l.breed
+    SELECT l.livestock_id, l.animal_type, l.breed, l.quantity
     FROM `livestock` l
     JOIN `user` u ON l.user_id COLLATE utf8mb4_unicode_ci = u.user_id COLLATE utf8mb4_unicode_ci
     WHERE LOWER(TRIM(u.business_name)) = LOWER(TRIM(:bname))
@@ -34,21 +34,63 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['record_sale']) && $ro
     $final_dt  = ($date_ok && $date_ok->format('Y-m-d') === $date_sold) ? $date_sold : date('Y-m-d');
 
     if ($lid !== '' && $qty > 0 && $amount > 0) {
-        $max_num = (int)$pdo->query("SELECT COALESCE(MAX(CAST(SUBSTRING(`sales_id`, 5) AS UNSIGNED)), 0) FROM `sales`")->fetchColumn();
-        $new_id  = sprintf("SLS-%05d", $max_num + 1);
-        $pdo->prepare("
-            INSERT INTO `sales` (`sales_id`, `livestock_id`, `amount`, `quantity_sold`, `date_sold`)
-            VALUES (:sid, :lid, :amt, :qty, :dt)
-        ")->execute([
-            'sid' => $new_id,
-            'lid' => $lid,
-            'amt' => $amount,
-            'qty' => $qty,
-            'dt'  => $final_dt
-        ]);
-        $_SESSION['flash_message'] = "Sale {$new_id} recorded.";
-        header("Location: sales.php");
-        exit;
+        try {
+            $pdo->beginTransaction();
+
+            $chk = $pdo->prepare("
+                SELECT l.quantity
+                FROM `livestock` l
+                JOIN `user` u ON l.user_id COLLATE utf8mb4_unicode_ci = u.user_id COLLATE utf8mb4_unicode_ci
+                WHERE l.`livestock_id` = :lid
+                  AND LOWER(TRIM(u.business_name)) = LOWER(TRIM(:bname))
+                FOR UPDATE
+            ");
+            $chk->execute(['lid' => $lid, 'bname' => $business]);
+            $avail_qty = $chk->fetchColumn();
+
+            if ($avail_qty === false) {
+                $pdo->rollBack();
+                $error = "Selected livestock record not found.";
+            } elseif ((int)$avail_qty < $qty) {
+                $pdo->rollBack();
+                $error = "Insufficient stock. Available quantity is only " . (int)$avail_qty . ".";
+            } else {
+                $max_num = (int)$pdo->query("SELECT COALESCE(MAX(CAST(SUBSTRING(`sales_id`, 5) AS UNSIGNED)), 0) FROM `sales`")->fetchColumn();
+                $new_id  = sprintf("SLS-%05d", $max_num + 1);
+
+                $pdo->prepare("
+                    INSERT INTO `sales` (`sales_id`, `livestock_id`, `amount`, `quantity_sold`, `date_sold`)
+                    VALUES (:sid, :lid, :amt, :qty, :dt)
+                ")->execute([
+                    'sid' => $new_id,
+                    'lid' => $lid,
+                    'amt' => $amount,
+                    'qty' => $qty,
+                    'dt'  => $final_dt
+                ]);
+
+                $pdo->prepare("
+                    UPDATE `livestock`
+                    SET `quantity` = `quantity` - :qty
+                    WHERE `livestock_id` = :lid
+                ")->execute([
+                    'qty' => $qty,
+                    'lid' => $lid
+                ]);
+
+                $pdo->commit();
+                $_SESSION['flash_message'] = "Sale {$new_id} recorded and livestock stock updated.";
+                header("Location: sales.php");
+                exit;
+            }
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            $error = "Unable to record sale. Please try again.";
+        }
+    } else {
+        $error = "Please select livestock and enter a valid quantity and amount.";
     }
 }
 
@@ -61,30 +103,118 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_sale']) && $role
     $date_ok   = DateTime::createFromFormat('Y-m-d', $date_sold);
 
     if ($sid !== '' && $lid !== '' && $qty > 0 && $amount > 0 && $date_ok && $date_ok->format('Y-m-d') === $date_sold) {
-        $pdo->prepare("
-            UPDATE `sales`
-            SET `livestock_id` = :lid,
-                `quantity_sold` = :qty,
-                `amount` = :amt,
-                `date_sold` = :dt
-            WHERE `sales_id` = :sid
-        ")->execute([
-            'lid' => $lid,
-            'qty' => $qty,
-            'amt' => $amount,
-            'dt'  => $date_sold,
-            'sid' => $sid
-        ]);
-        $_SESSION['flash_message'] = "Updated {$sid}.";
-        header("Location: sales.php");
-        exit;
+        try {
+            $pdo->beginTransaction();
+
+            $old_stmt = $pdo->prepare("
+                SELECT s.livestock_id, s.quantity_sold
+                FROM `sales` s
+                JOIN `livestock` l ON s.livestock_id COLLATE utf8mb4_unicode_ci = l.livestock_id COLLATE utf8mb4_unicode_ci
+                JOIN `user` u ON l.user_id COLLATE utf8mb4_unicode_ci = u.user_id COLLATE utf8mb4_unicode_ci
+                WHERE s.`sales_id` = :sid
+                  AND LOWER(TRIM(u.business_name)) = LOWER(TRIM(:bname))
+                FOR UPDATE
+            ");
+            $old_stmt->execute(['sid' => $sid, 'bname' => $business]);
+            $old_sale = $old_stmt->fetch();
+
+            if (!$old_sale) {
+                $pdo->rollBack();
+                $error = "Sale record not found.";
+            } else {
+                $old_lid = $old_sale['livestock_id'];
+                $old_qty = (int)$old_sale['quantity_sold'];
+
+                // Restore old quantity first
+                $pdo->prepare("UPDATE `livestock` SET `quantity` = `quantity` + :oqty WHERE `livestock_id` = :olid")
+                    ->execute(['oqty' => $old_qty, 'olid' => $old_lid]);
+
+                // Check new livestock stock
+                $chk = $pdo->prepare("
+                    SELECT l.quantity
+                    FROM `livestock` l
+                    JOIN `user` u ON l.user_id COLLATE utf8mb4_unicode_ci = u.user_id COLLATE utf8mb4_unicode_ci
+                    WHERE l.`livestock_id` = :lid
+                      AND LOWER(TRIM(u.business_name)) = LOWER(TRIM(:bname))
+                    FOR UPDATE
+                ");
+                $chk->execute(['lid' => $lid, 'bname' => $business]);
+                $avail_qty = $chk->fetchColumn();
+
+                if ($avail_qty === false || (int)$avail_qty < $qty) {
+                    $pdo->rollBack();
+                    $error = "Insufficient stock for the updated quantity. Available: " . (int)$avail_qty . ".";
+                } else {
+                    // Deduct new quantity
+                    $pdo->prepare("UPDATE `livestock` SET `quantity` = `quantity` - :qty WHERE `livestock_id` = :lid")
+                        ->execute(['qty' => $qty, 'lid' => $lid]);
+
+                    $pdo->prepare("
+                        UPDATE `sales`
+                        SET `livestock_id` = :lid,
+                            `quantity_sold` = :qty,
+                            `amount` = :amt,
+                            `date_sold` = :dt
+                        WHERE `sales_id` = :sid
+                    ")->execute([
+                        'lid' => $lid,
+                        'qty' => $qty,
+                        'amt' => $amount,
+                        'dt'  => $date_sold,
+                        'sid' => $sid
+                    ]);
+
+                    $pdo->commit();
+                    $_SESSION['flash_message'] = "Updated {$sid} and adjusted livestock stock.";
+                    header("Location: sales.php");
+                    exit;
+                }
+            }
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            $error = "Unable to update sale. Please try again.";
+        }
     } else {
         $error = "Please select livestock, enter a valid quantity and amount, and provide a valid date.";
     }
 }
 
 if (isset($_GET['delete']) && $role === 'O') {
-    $pdo->prepare("DELETE FROM `sales` WHERE `sales_id` = :sid")->execute(['sid' => $_GET['delete']]);
+    $del_sid = trim($_GET['delete']);
+    if ($del_sid !== '') {
+        try {
+            $pdo->beginTransaction();
+
+            $old_stmt = $pdo->prepare("
+                SELECT s.livestock_id, s.quantity_sold
+                FROM `sales` s
+                JOIN `livestock` l ON s.livestock_id COLLATE utf8mb4_unicode_ci = l.livestock_id COLLATE utf8mb4_unicode_ci
+                JOIN `user` u ON l.user_id COLLATE utf8mb4_unicode_ci = u.user_id COLLATE utf8mb4_unicode_ci
+                WHERE s.`sales_id` = :sid
+                  AND LOWER(TRIM(u.business_name)) = LOWER(TRIM(:bname))
+                FOR UPDATE
+            ");
+            $old_stmt->execute(['sid' => $del_sid, 'bname' => $business]);
+            $old_sale = $old_stmt->fetch();
+
+            if ($old_sale) {
+                $pdo->prepare("UPDATE `livestock` SET `quantity` = `quantity` + :qty WHERE `livestock_id` = :lid")
+                    ->execute(['qty' => (int)$old_sale['quantity_sold'], 'lid' => $old_sale['livestock_id']]);
+
+                $pdo->prepare("DELETE FROM `sales` WHERE `sales_id` = :sid")
+                    ->execute(['sid' => $del_sid]);
+            }
+
+            $pdo->commit();
+            $_SESSION['flash_message'] = "Deleted {$del_sid} and restored livestock stock.";
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+        }
+    }
     header("Location: sales.php");
     exit;
 }
@@ -225,7 +355,7 @@ foreach ($sales_by_item as $sb) {
                     <option value="">Select Livestock</option>
                     <?php foreach ($livestock_list as $lv): ?>
                       <option value="<?= htmlspecialchars($lv['livestock_id']) ?>">
-                        <?= htmlspecialchars($lv['animal_type'] . ' (' . $lv['breed'] . ')') ?>
+                        <?= htmlspecialchars($lv['animal_type'] . ' (' . $lv['breed'] . ') - Stock: ' . (int)$lv['quantity']) ?>
                       </option>
                     <?php endforeach; ?>
                   </select>
@@ -330,7 +460,7 @@ foreach ($sales_by_item as $sb) {
             <select class="form-control" name="livestock_id" id="edit_sale_livestock_id" required>
               <?php foreach ($livestock_list as $lv): ?>
                 <option value="<?= htmlspecialchars($lv['livestock_id']) ?>">
-                  <?= htmlspecialchars($lv['animal_type'] . ' (' . $lv['breed'] . ')') ?>
+                  <?= htmlspecialchars($lv['animal_type'] . ' (' . $lv['breed'] . ') - Stock: ' . (int)$lv['quantity']) ?>
                 </option>
               <?php endforeach; ?>
             </select>
