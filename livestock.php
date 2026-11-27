@@ -5,6 +5,7 @@ if (!isset($_SESSION['user_id'])) { header("Location: login.php"); exit; }
 $full_name = trim(($_SESSION['first_name'] ?? 'Juan') . ' ' . ($_SESSION['last_name'] ?? 'Dela Cruz'));
 $user_id   = $_SESSION['user_id'];
 $role      = strtoupper($_SESSION['user_type'] ?? 'O');
+$business  = trim((string)($_SESSION['business_name'] ?? ''));
 $message   = "";
 $error     = "";
 
@@ -66,19 +67,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_livestock']) && 
 
     if ($lid !== '' && $animal_type !== '' && $quantity > 0) {
         $stmt = $pdo->prepare("
-            UPDATE `livestock`
-            SET `animal_type` = :atype,
-                `breed` = :breed,
-                `quantity` = :qty,
-                `weight` = :wt
-            WHERE `livestock_id` = :lid
+            UPDATE `livestock` l
+            JOIN `user` u ON l.user_id COLLATE utf8mb4_unicode_ci = u.user_id COLLATE utf8mb4_unicode_ci
+            SET l.`animal_type` = :atype,
+                l.`breed` = :breed,
+                l.`quantity` = :qty,
+                l.`weight` = :wt
+            WHERE l.`livestock_id` = :lid
+              AND LOWER(TRIM(u.business_name)) = LOWER(TRIM(:bname))
         ");
         $stmt->execute([
             'atype' => $animal_type,
             'breed' => $breed !== '' ? $breed : 'Native',
             'qty'   => $quantity,
             'wt'    => $weight,
-            'lid'   => $lid
+            'lid'   => $lid,
+            'bname' => $business
         ]);
         $_SESSION['flash_message'] = "Updated {$lid}.";
         header("Location: livestock.php");
@@ -95,20 +99,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_status_field']
     $val   = trim($_POST['value'] ?? '');
 
     if ($lid !== '' && $field === 'health_status' && in_array($val, $allowed_health, true)) {
-        $stmt = $pdo->prepare("UPDATE `livestock` SET `health_status` = :val WHERE `livestock_id` = :lid");
-        $stmt->execute(['val' => $val, 'lid' => $lid]);
+        $stmt = $pdo->prepare("
+            UPDATE `livestock` l
+            JOIN `user` u ON l.user_id COLLATE utf8mb4_unicode_ci = u.user_id COLLATE utf8mb4_unicode_ci
+            SET l.`health_status` = :val
+            WHERE l.`livestock_id` = :lid
+              AND LOWER(TRIM(u.business_name)) = LOWER(TRIM(:bname))
+        ");
+        $stmt->execute(['val' => $val, 'lid' => $lid, 'bname' => $business]);
         $_SESSION['flash_message'] = "Updated health status for {$lid} to {$val}.";
     } elseif ($lid !== '' && $field === 'vaccination_status' && in_array($val, $allowed_vacc, true)) {
         $stmt = $pdo->prepare("
-            UPDATE `livestock`
-            SET `vaccination_status` = :val,
-                `vaccination_date` = CASE
-                    WHEN :val2 = 'Vaccinated' AND `vaccination_date` IS NULL THEN CURDATE()
-                    ELSE `vaccination_date`
+            UPDATE `livestock` l
+            JOIN `user` u ON l.user_id COLLATE utf8mb4_unicode_ci = u.user_id COLLATE utf8mb4_unicode_ci
+            SET l.`vaccination_status` = :val,
+                l.`vaccination_date` = CASE
+                    WHEN :val2 = 'Vaccinated' AND l.`vaccination_date` IS NULL THEN CURDATE()
+                    ELSE l.`vaccination_date`
                 END
-            WHERE `livestock_id` = :lid
+            WHERE l.`livestock_id` = :lid
+              AND LOWER(TRIM(u.business_name)) = LOWER(TRIM(:bname))
         ");
-        $stmt->execute(['val' => $val, 'val2' => $val, 'lid' => $lid]);
+        $stmt->execute(['val' => $val, 'val2' => $val, 'lid' => $lid, 'bname' => $business]);
         $_SESSION['flash_message'] = "Updated vaccination status for {$lid} to {$val}.";
     } else {
         $error = "Invalid status selection.";
@@ -121,15 +133,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_status_field']
 if (isset($_GET['delete']) && $role === 'O') {
     $del_id = trim($_GET['delete']);
     if ($del_id !== '') {
-        $stmt = $pdo->prepare("DELETE FROM `livestock` WHERE `livestock_id` = :lid");
-        $stmt->execute(['lid' => $del_id]);
+        $stmt = $pdo->prepare("
+            DELETE l FROM `livestock` l
+            JOIN `user` u ON l.user_id COLLATE utf8mb4_unicode_ci = u.user_id COLLATE utf8mb4_unicode_ci
+            WHERE l.`livestock_id` = :lid
+              AND LOWER(TRIM(u.business_name)) = LOWER(TRIM(:bname))
+        ");
+        $stmt->execute(['lid' => $del_id, 'bname' => $business]);
         $_SESSION['flash_message'] = "Deleted {$del_id}.";
     }
     header("Location: livestock.php");
     exit;
 }
 
-$records = $pdo->query("SELECT * FROM `livestock` ORDER BY `livestock_id` DESC")->fetchAll();
+$rec_stmt = $pdo->prepare("
+    SELECT l.*
+    FROM `livestock` l
+    JOIN `user` u ON l.user_id COLLATE utf8mb4_unicode_ci = u.user_id COLLATE utf8mb4_unicode_ci
+    WHERE LOWER(TRIM(u.business_name)) = LOWER(TRIM(:bname))
+    ORDER BY l.`livestock_id` DESC
+");
+$rec_stmt->execute(['bname' => $business]);
+$records = $rec_stmt->fetchAll();
 
 function health_tone_class(string $val): string {
     return match ($val) {
@@ -217,7 +242,6 @@ function render_vacc_dropdown(string $lid, string $current_val): void {
   <title>Livestock - LivestockPro</title>
   <link rel="stylesheet" href="css/style.css">
   <style>
-    /* Compact borderless pill sizing matching task_schedule */
     .status-dd {
       display: inline-block;
       position: relative;
@@ -257,7 +281,6 @@ function render_vacc_dropdown(string $lid, string $current_val): void {
       cursor: pointer;
     }
 
-    /* Health & Vaccinated bright green pill */
     .status-dd-btn.tone-healthy,
     .status-dd-opt.tone-healthy {
       background: #bff3cd;
