@@ -4,7 +4,7 @@ if (!isset($_SESSION['user_id'])) { header("Location: login.php"); exit; }
 
 $user_id  = $_SESSION['user_id'];
 $role     = strtoupper($_SESSION['user_type'] ?? 'O');
-$business = $_SESSION['business_name'] ?? 'Business Name';
+$business = trim((string)($_SESSION['business_name'] ?? 'Business Name'));
 $message  = "";
 $error    = "";
 
@@ -163,13 +163,53 @@ if ($full_name === '') {
     $full_name = $user_id;
 }
 
-$total_income   = (float)$pdo->query("SELECT COALESCE(SUM(amount), 0) FROM `sales`")->fetchColumn();
-$capital_amount = (float)$pdo->query("SELECT COALESCE(SUM(cap_amount), 0) FROM `capital`")->fetchColumn();
+$inc_stmt = $pdo->prepare("
+    SELECT COALESCE(SUM(s.amount), 0)
+    FROM `sales` s
+    JOIN `livestock` l ON s.livestock_id COLLATE utf8mb4_unicode_ci = l.livestock_id COLLATE utf8mb4_unicode_ci
+    JOIN `user` u ON l.user_id COLLATE utf8mb4_unicode_ci = u.user_id COLLATE utf8mb4_unicode_ci
+    WHERE LOWER(TRIM(u.business_name)) = LOWER(TRIM(:bname))
+");
+$inc_stmt->execute(['bname' => $business]);
+$total_income = (float)$inc_stmt->fetchColumn();
+
+$cap_tot_stmt = $pdo->prepare("
+    SELECT COALESCE(SUM(c.cap_amount), 0)
+    FROM `capital` c
+    JOIN `user` u ON c.user_id COLLATE utf8mb4_unicode_ci = u.user_id COLLATE utf8mb4_unicode_ci
+    WHERE LOWER(TRIM(u.business_name)) = LOWER(TRIM(:bname))
+");
+$cap_tot_stmt->execute(['bname' => $business]);
+$capital_amount = (float)$cap_tot_stmt->fetchColumn();
 
 if ($role === 'O') {
-    $pending_tasks      = (int)$pdo->query("SELECT COUNT(*) FROM `task_schedule` WHERE `task_status` = 'Pending'")->fetchColumn();
-    $in_progress_tasks  = (int)$pdo->query("SELECT COUNT(*) FROM `task_schedule` WHERE `task_status` = 'In Progress'")->fetchColumn();
-    $completed_tasks    = (int)$pdo->query("SELECT COUNT(*) FROM `task_schedule` WHERE `task_status` = 'Completed'")->fetchColumn();
+    $st_p = $pdo->prepare("
+        SELECT COUNT(*)
+        FROM `task_schedule` ts
+        JOIN `user` u ON ts.user_id COLLATE utf8mb4_unicode_ci = u.user_id COLLATE utf8mb4_unicode_ci
+        WHERE LOWER(TRIM(u.business_name)) = LOWER(TRIM(:bname)) AND ts.`task_status` = 'Pending'
+    ");
+    $st_p->execute(['bname' => $business]);
+    $pending_tasks = (int)$st_p->fetchColumn();
+
+    $st_ip = $pdo->prepare("
+        SELECT COUNT(*)
+        FROM `task_schedule` ts
+        JOIN `user` u ON ts.user_id COLLATE utf8mb4_unicode_ci = u.user_id COLLATE utf8mb4_unicode_ci
+        WHERE LOWER(TRIM(u.business_name)) = LOWER(TRIM(:bname)) AND ts.`task_status` = 'In Progress'
+    ");
+    $st_ip->execute(['bname' => $business]);
+    $in_progress_tasks = (int)$st_ip->fetchColumn();
+
+    $st_c = $pdo->prepare("
+        SELECT COUNT(*)
+        FROM `task_schedule` ts
+        JOIN `user` u ON ts.user_id COLLATE utf8mb4_unicode_ci = u.user_id COLLATE utf8mb4_unicode_ci
+        WHERE LOWER(TRIM(u.business_name)) = LOWER(TRIM(:bname)) AND ts.`task_status` = 'Completed'
+    ");
+    $st_c->execute(['bname' => $business]);
+    $completed_tasks = (int)$st_c->fetchColumn();
+
     $staff_task_history = [];
 } else {
     $stmt_p = $pdo->prepare("SELECT COUNT(*) FROM `task_schedule` WHERE `user_id` = :uid AND `task_status` = 'Pending'");
@@ -195,19 +235,26 @@ if ($role === 'O') {
     $staff_task_history = $stmt_th->fetchAll();
 }
 
-$investment_history = $pdo->query("
-    SELECT cap_id, cap_description, cap_amount, date_invested
-    FROM `capital`
-    ORDER BY date_invested DESC, cap_id DESC
+$inv_stmt = $pdo->prepare("
+    SELECT c.cap_id, c.cap_description, c.cap_amount, c.date_invested
+    FROM `capital` c
+    JOIN `user` u ON c.user_id COLLATE utf8mb4_unicode_ci = u.user_id COLLATE utf8mb4_unicode_ci
+    WHERE LOWER(TRIM(u.business_name)) = LOWER(TRIM(:bname))
+    ORDER BY c.date_invested DESC, c.cap_id DESC
     LIMIT 6
-")->fetchAll();
+");
+$inv_stmt->execute(['bname' => $business]);
+$investment_history = $inv_stmt->fetchAll();
 
-$staff_rows = $pdo->query("
-    SELECT s.user_id, u.first_name, u.last_name, s.date_hired, s.staff_status
+$stf_stmt = $pdo->prepare("
+    SELECT s.user_id, u.username, u.first_name, u.last_name, s.date_hired, s.staff_status
     FROM `staff` s
-    JOIN `user` u ON s.user_id = u.user_id
+    JOIN `user` u ON s.user_id COLLATE utf8mb4_unicode_ci = u.user_id COLLATE utf8mb4_unicode_ci
+    WHERE LOWER(TRIM(u.business_name)) = LOWER(TRIM(:bname))
     ORDER BY s.user_id ASC
-")->fetchAll();
+");
+$stf_stmt->execute(['bname' => $business]);
+$staff_rows = $stf_stmt->fetchAll();
 
 $pending_staff_stmt = $pdo->prepare("
     SELECT s.user_id, u.first_name, u.last_name, u.username, u.business_name
@@ -441,6 +488,9 @@ $pending_staff_rows = $pending_staff_stmt->fetchAll();
               <table class="data-table">
                 <thead><tr><th>USERNAME</th><th>NAME</th><th>DATE STARTED</th></tr></thead>
                 <tbody>
+                  <?php if (empty($staff_rows)): ?>
+                    <tr><td colspan="3" style="text-align:center;color:var(--text-muted);">No staff members registered for <?= htmlspecialchars($business) ?>.</td></tr>
+                  <?php endif; ?>
                   <?php foreach ($staff_rows as $sr): ?>
                     <?php
                       $stStatus = strtolower(trim((string)($sr['staff_status'] ?? 'pending')));
@@ -450,7 +500,7 @@ $pending_staff_rows = $pending_staff_stmt->fetchAll();
                           : 'Pending';
                     ?>
                     <tr>
-                      <td><?= htmlspecialchars($sr['user_id']) ?></td>
+                      <td><?= htmlspecialchars($sr['username'] ?: $sr['user_id']) ?></td>
                       <td><?= strtoupper(htmlspecialchars($sr['first_name'] . ' ' . $sr['last_name'])) ?></td>
                       <td style="white-space:nowrap;"><?= htmlspecialchars($dhDisplay) ?></td>
                     </tr>
@@ -486,15 +536,14 @@ $pending_staff_rows = $pending_staff_stmt->fetchAll();
               <div class="card-title">Investment History</div>
               <table class="data-table">
                 <thead>
-                  <tr><th>ID.</th><th>DESCRIPTION</th><th>AMOUNT</th><th>DATE</th></tr>
+                  <tr><th>DESCRIPTION</th><th>AMOUNT</th><th>DATE</th></tr>
                 </thead>
                 <tbody>
                   <?php if (empty($investment_history)): ?>
-                    <tr><td colspan="4" style="text-align:center;color:var(--text-muted);">No capital added yet.</td></tr>
+                    <tr><td colspan="3" style="text-align:center;color:var(--text-muted);">No capital added yet.</td></tr>
                   <?php endif; ?>
                   <?php foreach ($investment_history as $inv): ?>
                     <tr>
-                      <td><?= htmlspecialchars($inv['cap_id']) ?></td>
                       <td><?= htmlspecialchars(($inv['cap_description'] ?? '') !== '' ? mb_strimwidth($inv['cap_description'], 0, 24, '...') : '-') ?></td>
                       <td>&#8369;<?= number_format((float)$inv['cap_amount'], 0) ?></td>
                       <td style="white-space:nowrap;"><?= htmlspecialchars(substr((string)($inv['date_invested'] ?? ''), 0, 10)) ?></td>
@@ -536,11 +585,11 @@ $pending_staff_rows = $pending_staff_stmt->fetchAll();
               <div class="card-title">Task History</div>
               <table class="data-table">
                 <thead>
-                  <tr><th>ID</th><th>DESCRIPTION</th><th>DATE</th></tr>
+                  <tr><th>DESCRIPTION</th><th>DATE</th></tr>
                 </thead>
                 <tbody>
                   <?php if (empty($staff_task_history)): ?>
-                    <tr><td colspan="3" style="text-align:center;color:var(--text-muted);">No tasks assigned to you yet.</td></tr>
+                    <tr><td colspan="2" style="text-align:center;color:var(--text-muted);">No tasks assigned to you yet.</td></tr>
                   <?php endif; ?>
                   <?php foreach ($staff_task_history as $th): ?>
                     <?php
@@ -550,7 +599,6 @@ $pending_staff_rows = $pending_staff_stmt->fetchAll();
                       }
                     ?>
                     <tr>
-                      <td><?= htmlspecialchars($th['task_id']) ?></td>
                       <td><?= strtoupper(htmlspecialchars($desc_txt)) ?></td>
                       <td style="white-space:nowrap;"><?= htmlspecialchars(date('n/j/Y', strtotime($th['schedule_date']))) ?></td>
                     </tr>
@@ -564,6 +612,9 @@ $pending_staff_rows = $pending_staff_stmt->fetchAll();
               <table class="data-table">
                 <thead><tr><th>USERNAME</th><th>NAME</th><th>DATE STARTED</th></tr></thead>
                 <tbody>
+                  <?php if (empty($staff_rows)): ?>
+                    <tr><td colspan="3" style="text-align:center;color:var(--text-muted);">No staff members registered for <?= htmlspecialchars($business) ?>.</td></tr>
+                  <?php endif; ?>
                   <?php foreach ($staff_rows as $sr): ?>
                     <?php
                       $stStatus = strtolower(trim((string)($sr['staff_status'] ?? 'pending')));
@@ -573,7 +624,7 @@ $pending_staff_rows = $pending_staff_stmt->fetchAll();
                           : 'Pending';
                     ?>
                     <tr>
-                      <td><?= htmlspecialchars($sr['user_id']) ?></td>
+                      <td><?= htmlspecialchars($sr['username'] ?: $sr['user_id']) ?></td>
                       <td><?= strtoupper(htmlspecialchars($sr['first_name'] . ' ' . $sr['last_name'])) ?></td>
                       <td style="white-space:nowrap;"><?= htmlspecialchars($dhDisplay) ?></td>
                     </tr>
